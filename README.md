@@ -292,7 +292,7 @@ class BitcoinValidator(BaseValidator):
     def validate_legacy_tx(self) -> bool:
         pass
 
-        def validate_tx(self) -> bool:
+    def validate_tx(self) -> bool:
         try:
             return self.validate_legacy_tx()
         except bitcoinlib.transactions.TransactionError:
