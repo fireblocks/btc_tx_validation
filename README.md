@@ -141,7 +141,191 @@ class JWTHandler:
 
 ```
 
+The class above should be instantiated with the following parameters:
+raw_req - the body (JWT) of the HTTP request we received
+callback_private_key - the private key of your callback server
+cosigner_pubkey - the cosigner public key 
+request_id - none (we will set this value later)
 
+It also has the following methods:
+set_request_id - a setter for the request ID we got in our HTTP request
+authenticate_request - uses the jwt module in order to verify the signed JWT and returns the decoded payload
+sign_approve_response - Creates and signs the APPROVE response
+sign_reject_response - Creates and signs the REJECT response
+
+### Verifying the JWT
+```
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import uvicorn
+import jwt
+from jwt import 
+app = FastAPI()
+
+class JWTHandler:
+    def __init__(self, raw_req, callback_private_key, cosigner_pubkey):
+        self.raw_req = raw_req
+        self.callback_private_key = callback_private_key
+        self.cosigner_pubkey = cosigner_pubkey
+        self.request_id = None
+
+    def set_request_id(self, request_id):
+        self.request_id = request_id
+
+    def authenticate_request(self):
+        decoded_request = jwt.decode(
+            self.raw_req, self.cosigner_pubkey, algorithms=["RS256"]
+        )
+        self.set_request_id(decoded_request["requestId"])
+        return decoded_request
+
+    def sign_approve_response(self):
+        return jwt.encode(
+            {"action": "APPROVE", "requestId": self.request_id},
+            self.callback_private_key,
+            algorithm="RS256")
+
+    def sign_reject_response(self):
+        return jwt.encode(
+            {
+                "action": "REJECT",
+                "rejectionReason": "BTC transaction validation failed",
+                "requestId": self.request_id,
+            },
+            self.callback_private_key,
+            algorithm="RS256", 
+)
+
+@app.post("/v2/tx_sign_request")
+async def authorize_tx_request(request: Request) -> JSONResponse:
+    raw_body = await request.body()
+    with open("cosigner_public.pem", "r") as f1, open(
+        "callback_private.pem", "r"
+    ) as f2:
+        cosigner_pubkey = f1.read()
+        callback_private_key = f2.read()
+    try:
+        jwt_handler = JWTHandler(
+            raw_body,
+            cosigner_pubkey=cosigner_pubkey,
+            callback_private_key=callback_private_key
+        )
+        callback_metadata = jwt_handler.authenticate_request()
+    except DecodeError:
+        return JSONResponse(
+            status_code=401, content={"message": "Authentication Failed"}
+        )
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, port=8008)
+```
+
+## Creating utility classes
+To make this code reusable and composable we will define an abstract class BaseValidator:
+```
+import abc
+
+class BaseValidator(abc.ABC):
+    @abc.abstractmethod
+    def validate_tx(self) -> bool:
+        raise NotImplementedError
+
+```
+
+In addition we will need to access Fireblocks API hence let’s define a FireblocksClient class:
+```
+from fireblocks_sdk import FireblocksSDK
+
+class FireblocksClient:
+    def __init__(self):
+        self.api_key = "my_api_key"
+        with open("path_to_my_secret_key_file", "r") as kf:
+            self.secret_key = kf.read()
+        self.client = FireblocksSDK(self.secret_key, self.api_key)
+
+```
+
+Now we can create a BitcoinValidator class that inherits from the BaseValidator class and implement the validate_tx method:
+```
+class BitcoinValidator(BaseValidator):
+    def __init__(self, callback_metadata):
+        self.raw_tx = callback_metadata["rawTx"]
+        self.metadata = callback_metadata
+        self.fireblocks = FireblocksConnector()
+    
+    def validate_tx(self) -> bool:
+        pass
+```
+
+As mentioned before, we need to have the ability to validate 2 different types of transactions, so let’s implement the validate_legacy_tx and validate_segwit_tx methods:
+```
+class BitcoinValidator(BaseValidator):
+    def __init__(self, callback_metadata):
+        self.raw_tx = callback_metadata["rawTx"]
+        self.metadata = callback_metadata
+        self.fireblocks = FireblocksConnector()
+    
+    def validate_segwit_tx(self) -> bool:
+        pass
+   
+    def validate_legacy_tx(self) -> bool:
+        pass
+
+    def validate_tx(self) -> bool:
+        pass
+```
+
+Now we can implement the validate_tx logic:
+```
+import bitcoinlib
+
+class BitcoinValidator(BaseValidator):
+    def __init__(self, callback_metadata):
+        self.raw_tx = callback_metadata["rawTx"]
+        self.metadata = callback_metadata
+        self.fireblocks = FireblocksConnector()
+    
+    def validate_segwit_tx(self) -> bool:
+        pass
+   
+    def validate_legacy_tx(self) -> bool:
+        pass
+
+    def validate_tx(self) -> bool:
+        try:
+            self.validate_legacy_tx()
+        except bitcoinlib.transactions.TransactionError:
+            self.validate_segwit_tx()
+        except SegwitTransactionValidationException:
+            return False
+
+```
+
+So actually what happens here is that instead of trying to identify whether the transaction we are trying to validate is Legacy or Segwit, we will just try…except any transaction validation error that will be raised. 
+
+## Validating Legacy transactions
+
+As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
+```
+def validate_legacy_tx(self):
+    amount = 0
+    for raw_input in self.raw_tx:
+        parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False)
+        tx_refs = self.fireblocks.get_tx_refs()
+        tx_ref = BitcoinUtils.find_tx_ref(tx_refs)
+        amount += float(tx_ref["amount"])
+        if self.metadata["destAddress"] != parsed_tx["outputs"]["address"]:
+            raise bitcoinlib.transactions.TransactionError("The parsed destination address is different from the one in the metadata")
+        if len(self.raw_tx) != len(parsed_tx.inputs):
+            raise bitcoinlib.transactions.TransactionError("Num of inputs does not equal to the number of provided inputs in the metadata")
+        if parsed_tx["outputs"]["value"] / 10**8 != raw_input["amount"]:
+            raise bitcoinlib.transactions.TransactionError("Output amount does not equal to the requested amount")
+        if amount / 10**8 - float(self.metadata["fee"]) == self.metadata["amount"]:
+            raise bitcoinlib.transactions.TransactionError( "The sum of inputs minus the fee does not equal to the requested amount")
+```
+
+Let's try to understand what’s going on here:
 
 
 
