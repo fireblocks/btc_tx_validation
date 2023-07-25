@@ -15,32 +15,30 @@ SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9
 
 ```
 {
-  "txId": "153736c6-7308-4e6e-b633-d243ab1211df",
+  "txId": "3acaf94b-e77f-41f3-b68e-a1fa26e131f9",
   "operation": "TRANSFER",
   "sourceType": "VAULT",
-  "sourceId": "25",
-  "destType": "VAULT",
-  "destId": "0",
+  "sourceId": "0",
+  "destType": "ONE_TIME_ADDRESS",
+  "destId": "",
   "asset": "BTC",
-  "amount": 0.0005,
-  "amountStr": "0.00050000",
-  "requestedAmount": 0.0005,
-  "requestedAmountStr": "0.0005",
-  "fee": "0.00002598",
-  "destAddressType": "WHITELISTED",
-  "destAddress": "bc1qjhm0h7vhdyu0d0luv34dlz654rmsvg8twywk99",
+  "amount": 0.000876,
+  "amountStr": "0.00087600",
+  "requestedAmount": 0.000876,
+  "requestedAmountStr": "0.000876",
+  "fee": "0.00004164",
+  "destAddressType": "ONE_TIME",
+  "destAddress": "1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC",
   "destinations": [
     {
-      "amountNative": 0.0005,
-      "amountNativeStr": "0.0005",
-      "amountUSD": 14.98097333,
-      "dstAddressType": "WHITELISTED",
-      "dstId": "0",
-      "dstWalletId": "",
-      "dstName": "Main Vault - ID 0",
-      "dstSubType": "",
-      "dstType": "VAULT",
-      "displayDstAddress": "bc1qjhm0h7vhdyu0d0luv34dlz654rmsvg8twywk99",
+      "amountNative": 0.000876,
+      "amountNativeStr": "0.000876",
+      "amountUSD": 25.64271683,
+      "dstAddress": "1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC",
+      "dstAddressType": "ONE_TIME",
+      "dstId": "",
+      "dstType": "ONE_TIME_ADDRESS",
+      "displayDstAddress": "1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC",
       "action": "ALLOW",
       "actionInfo": {
         "capturedRuleNum": 5,
@@ -53,14 +51,14 @@ SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9
   ],
   "rawTx": [
     {
-      "keyDerivationPath": "[ 44, 0, 25, 0, 0 ]",
-      "rawTx": "01000000b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632adf0c9e8670413c6c965f9e2a8de2bf881512b8e7ebc067cbf6078d20c18f86086000000001976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac50c3000000000000fffffffff04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba10000000001000000",
-      "payload": "29d5a9b584b6f34d0f6b8c3e63b8b8d995b35efc7ccae7efb09ac59c00f6690d"
+      "keyDerivationPath": "[ 44, 0, 0, 0, 0 ]",
+      "rawTx": "0100000002c845e228b169e8713414f51f5a60a1c670aaf57138811279ddc3b530fe4c4ac8000000001976a91495f6fbf9976938f6bffc646adf8b54a8f70620eb88acffffffffa3d781905b0122466f72efa1f751cf8e2cb9f6fda8efedf989443bd358ec5f480000000000ffffffff0230560100000000001976a9148ca80d9b17cdba4b0f9b117c92852ca04a69783988ac2b4901000000000016001495f6fbf9976938f6bffc646adf8b54a8f70620eb0000000001000000",
+      "payload": "74bac76ffa277c14ba33ff1be302ed07e0a1e5dceebdc5f161df8d9d688b613c"
     },
     {
-      "keyDerivationPath": "[ 44, 0, 25, 0, 0 ]",
-      "rawTx": "01000000b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632addab66c1c2cb4ff9b4aee2dffd89202728612859b5c8804b790f7719f91df380a000000001976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac50c3000000000000fffffffff04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba10000000001000000",
-      "payload": "77b3e791aeadca9498701ceb6b58fc84efb96ca787c8220fb9c622b97c101596"
+      "keyDerivationPath": "[ 44, 0, 0, 0, 0 ]",
+      "rawTx": "0100000002c845e228b169e8713414f51f5a60a1c670aaf57138811279ddc3b530fe4c4ac80000000000ffffffffa3d781905b0122466f72efa1f751cf8e2cb9f6fda8efedf989443bd358ec5f48000000001976a91495f6fbf9976938f6bffc646adf8b54a8f70620eb88acffffffff0230560100000000001976a9148ca80d9b17cdba4b0f9b117c92852ca04a69783988ac2b4901000000000016001495f6fbf9976938f6bffc646adf8b54a8f70620eb0000000001000000",
+      "payload": "ea70ff4dd53c7e99948ee3a27e070fe4efea2e3d9dd793eadea86cb04c8103be"
     }
   ],
   "players": [
@@ -68,12 +66,12 @@ SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9
     "27900737-46f6-4097-a169-d0ff45649ed5",
     "f89cac50-c656-4e74-879f-041aff8d01b5"
   ],
-  "requestId": "153736c6-7308-4e6e-b633-d243ab1211df"
+  "requestId": "3acaf94b-e77f-41f3-b68e-a1fa26e131f9"
 }
 ```
 
 We can see that unlike in ETH, we can have more than 1 object in the rawTx array. This is due to the fact that one needs to sign on every UTXO he spends, hence each object contains the specific UTXO data and the hash that needs to be signed. There are 2 UTXOs (inputs) In our example transaction.
-Moreover, in this specific example, we are looking at a Segwit transaction. We will explain how to differentiate between Segwit and Legacy later in the guide.
+Moreover, in this specific example, we are looking at a Legacy transaction. We will explain how to differentiate between Segwit and Legacy later in the guide.
 
 Another important thing to mention is that there is no python implementation of verifying Segwit RAW transactions (at least that I could find), therefore we are going to use bitcoinlib for validating a legacy transaction and write our own logic for SegWit (brace yourself).
 
@@ -308,21 +306,44 @@ So actually what happens here is that instead of trying to identify whether the 
 
 As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
 ```
-def validate_legacy_tx(self):
-    amount = 0
-    for raw_input in self.raw_tx:
-        parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False)
-        tx_refs = self.fireblocks.get_tx_refs()
-        tx_ref = BitcoinUtils.find_tx_ref(tx_refs)
-        amount += float(tx_ref["amount"])
-        if self.metadata["destAddress"] != parsed_tx["outputs"]["address"]:
-            raise bitcoinlib.transactions.TransactionError("The parsed destination address is different from the one in the metadata")
-        if len(self.raw_tx) != len(parsed_tx.inputs):
-            raise bitcoinlib.transactions.TransactionError("Num of inputs does not equal to the number of provided inputs in the metadata")
-        if parsed_tx["outputs"]["value"] / 10**8 != raw_input["amount"]:
-            raise bitcoinlib.transactions.TransactionError("Output amount does not equal to the requested amount")
-        if amount / 10**8 - float(self.metadata["fee"]) == self.metadata["amount"]:
-            raise bitcoinlib.transactions.TransactionError( "The sum of inputs minus the fee does not equal to the requested amount")
+        def validate_legacy_tx(self):
+        tx_outputs = {}
+        filtered_tx_refs = {}
+        tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
+        for raw_input in self.raw_tx:
+            tx_outputs = {"total_outputs_amount": 0}
+            filtered_tx_refs = {"total_inputs_amount": 0}
+            parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
+                raw_input["rawTx"], strict=False
+            ).as_dict()
+            for i, utxo in enumerate(parsed_tx["inputs"]):
+                tx_ref = BitcoinUtils.find_tx_ref(
+                    utxo["prev_txid"], utxo["output_n"], tx_refs
+                )
+                if tx_ref is not None:
+                    filtered_tx_refs["total_inputs_amount"] += int(
+                        float(tx_refs[tx_ref]["amount"]) * 10**8
+                    )
+                else:
+                    raise bitcoinlib.transactions.TransactionError(
+                        "Input hash does not exits in transaction refs"
+                    )
+                tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+                tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+
+        tx_fee = int(float(self.metadata["fee"]) * 10**8)
+        metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
+        metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
+        if (
+            metadata_destination not in tx_outputs
+            or metadata_amount != tx_outputs[metadata_destination]
+            or filtered_tx_refs["total_inputs_amount"]
+            - tx_outputs["total_outputs_amount"]
+            - tx_fee
+            > 0
+        ):
+            return False
+        return True
 ```
 
 Let's try to understand what’s going on here:
