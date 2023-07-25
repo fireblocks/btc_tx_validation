@@ -83,14 +83,14 @@ First, let’s install some dependencies:\
 
 Creating our FastAPI application and route:
 ```python
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 import uvicorn
 
 app = FastAPI()
 
 @app.post("/v2/tx_sign_request")
-async def authorize_tx_request(request: Request) -> JSONResponse:
+async def authorize_tx_request(request: Request) -> Response:
     pass
 
 if __name__ == "__main__":
@@ -153,7 +153,7 @@ sign_reject_response - Creates and signs the REJECT response
 
 ### Verifying the JWT
 ```python
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 import uvicorn
 import jwt
@@ -307,30 +307,26 @@ So actually what happens here is that instead of trying to identify whether the 
 
 As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
 ```python
-        def validate_legacy_tx(self):
-        tx_outputs = {}
-        filtered_tx_refs = {}
+    def validate_legacy_tx(self):
+        tx_outputs = {"total_outputs_amount": 0}
+        filtered_tx_refs = {"total_inputs_amount": 0}
         tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
-        for raw_input in self.raw_tx:
-            tx_outputs = {"total_outputs_amount": 0}
-            filtered_tx_refs = {"total_inputs_amount": 0}
+        for i, raw_input in enumerate(self.raw_tx):
             parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
                 raw_input["rawTx"], strict=False
             ).as_dict()
-            for i, utxo in enumerate(parsed_tx["inputs"]):
-                tx_ref = BitcoinUtils.find_tx_ref(
-                    utxo["prev_txid"], utxo["output_n"], tx_refs
-                )
-                if tx_ref is not None:
-                    filtered_tx_refs["total_inputs_amount"] += int(
-                        float(tx_refs[tx_ref]["amount"]) * 10**8
-                    )
-                else:
-                    raise bitcoinlib.transactions.TransactionError(
-                        "Input hash does not exits in transaction refs"
-                    )
-                tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-                tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+            if len(self.raw_tx) != len(parsed_tx['inputs']):
+                raise bitcoinlib.transactions.TransactionError("Number of inputs in the parsed tx doesn't match")
+            tx_ref = BitcoinUtils.find_tx_ref(
+                    parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
+            if tx_ref is not None:
+                filtered_tx_refs["total_inputs_amount"] += int(
+                    float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+            else:
+                raise bitcoinlib.transactions.TransactionError(
+                    "Input hash does not exits in transaction refs")
+            tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+            tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
 
         tx_fee = int(float(self.metadata["fee"]) * 10**8)
         metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
