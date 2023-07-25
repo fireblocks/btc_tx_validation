@@ -13,7 +13,7 @@ SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9
 
 ## BTC callback payload example
 
-```
+```json
 {
   "txId": "3acaf94b-e77f-41f3-b68e-a1fa26e131f9",
   "operation": "TRANSFER",
@@ -82,7 +82,7 @@ First, let’s install some dependencies:\
 ``` pip install fastapi pyjwt bitcoinlib uvicorn bech32 fireblocks-sdk ```
 
 Creating our FastAPI application and route:
-```
+```python
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
 ## JWT Verification:
 First we will create a JWTHandler class:
-```
+```python
 import jwt
 
 class JWTHandler:
@@ -152,7 +152,7 @@ sign_approve_response - Creates and signs the APPROVE response
 sign_reject_response - Creates and signs the REJECT response
 
 ### Verifying the JWT
-```
+```python
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 
 ## Creating utility classes
 To make this code reusable and composable we will define an abstract class BaseValidator:
-```
+```python
 import abc
 
 class BaseValidator(abc.ABC):
@@ -232,7 +232,7 @@ class BaseValidator(abc.ABC):
 ```
 
 In addition we will need to access Fireblocks API hence let’s define a FireblocksClient class:
-```
+```python
 from fireblocks_sdk import FireblocksSDK
 
 class FireblocksClient:
@@ -245,7 +245,7 @@ class FireblocksClient:
 ```
 
 Now we can create a BitcoinValidator class that inherits from the BaseValidator class and implement the validate_tx method:
-```
+```python
 class BitcoinValidator(BaseValidator):
     def __init__(self, callback_metadata):
         self.raw_tx = callback_metadata["rawTx"]
@@ -257,7 +257,7 @@ class BitcoinValidator(BaseValidator):
 ```
 
 As mentioned before, we need to have the ability to validate 2 different types of transactions, so let’s implement the validate_legacy_tx and validate_segwit_tx methods:
-```
+```python
 class BitcoinValidator(BaseValidator):
     def __init__(self, callback_metadata):
         self.raw_tx = callback_metadata["rawTx"]
@@ -275,7 +275,7 @@ class BitcoinValidator(BaseValidator):
 ```
 
 Now we can implement the validate_tx logic:
-```
+```python
 import bitcoinlib
 
 class BitcoinValidator(BaseValidator):
@@ -305,7 +305,7 @@ So actually what happens here is that instead of trying to identify whether the 
 ## Validating Legacy transactions
 
 As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
-```
+```python
         def validate_legacy_tx(self):
         tx_outputs = {}
         filtered_tx_refs = {}
