@@ -79,7 +79,7 @@ Another important thing to mention is that there is no python implementation of 
 ## Creating our Callback Application
 We are going to use python and FastAPI in this guide.
 First, let’s install some dependencies:\
-``` pip install fastapi pyjwt bitcoinlib uvicorn bech32 fireblocks-sdk ```
+``` pip install fastapi pyjwt bitcoinlib uvicorn bech32 fireblocks-sdk aiofiles```
 
 Creating our FastAPI application and route:
 ```python
@@ -157,7 +157,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
 import jwt
-from jwt import 
+from jwt import
+import aiofiles
+
 app = FastAPI()
 
 class JWTHandler:
@@ -197,11 +199,11 @@ class JWTHandler:
 @app.post("/v2/tx_sign_request")
 async def authorize_tx_request(request: Request) -> JSONResponse:
     raw_body = await request.body()
-    with open("cosigner_public.pem", "r") as f1, open(
+    async with aiofiles.open("cosigner_public.pem", "r") as f1, aiofiles.open(
         "callback_private.pem", "r"
     ) as f2:
-        cosigner_pubkey = f1.read()
-        callback_private_key = f2.read()
+        cosigner_pubkey = await f1.read()
+        callback_private_key = await f2.read()
     try:
         jwt_handler = JWTHandler(
             raw_body,
@@ -286,7 +288,7 @@ class BitcoinValidator(BaseValidator):
     
     def validate_segwit_tx(self) -> bool:
         pass
-   
+        
     def validate_legacy_tx(self) -> bool:
         pass
 
@@ -297,7 +299,6 @@ class BitcoinValidator(BaseValidator):
             self.validate_segwit_tx()
         except SegwitTransactionValidationException:
             return False
-
 ```
 
 So actually what happens here is that instead of trying to identify whether the transaction we are trying to validate is Legacy or Segwit, we will just try…except any transaction validation error that will be raised. 
