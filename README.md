@@ -288,16 +288,16 @@ class BitcoinValidator(BaseValidator):
     
     def validate_segwit_tx(self) -> bool:
         pass
-        
+
     def validate_legacy_tx(self) -> bool:
         pass
 
-    def validate_tx(self) -> bool:
+        def validate_tx(self) -> bool:
         try:
-            self.validate_legacy_tx()
+            return self.validate_legacy_tx()
         except bitcoinlib.transactions.TransactionError:
-            self.validate_segwit_tx()
-        except SegwitTransactionValidationException:
+            return self.validate_segwit_tx()
+        except (SegwitTransactionValidationException, Exception):
             return False
 ```
 
