@@ -435,28 +435,30 @@ Parsing the raw transaction hex by using the bitcoinlib library. It should look 
     'network': 'bitcoin',
     'output_total': 169457,
     'outputs': [
-                {
-                    'address': '1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC',
-                    'output_n': 0,
-                    'public_hash': '8ca80d9b17cdba4b0f9b117c92852ca04a697839',
-                    'public_key': '',
-                    'script': '76a9148ca80d9b17cdba4b0f9b117c92852ca04a69783988ac',
-                    'script_type': 'p2pkh',
-                    'spending_index_n': None,
-                    'spending_txid': '',
-                    'spent': False,
-                    'value': 87600},
-                    {'address': 'bc1qjhm0h7vhdyu0d0luv34dlz654rmsvg8twywk99',
-                    'output_n': 1,
-                    'public_hash': '95f6fbf9976938f6bffc646adf8b54a8f70620eb',
-                    'public_key': '',
-                    'script': '001495f6fbf9976938f6bffc646adf8b54a8f70620eb',
-                    'script_type': 'p2wpkh',
-                    'spending_index_n': None,
-                    'spending_txid': '',
-                    'spent': False,
-                    'value': 81857
-                }
+        {
+            'address': '1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC',
+            'output_n': 0,
+            'public_hash': '8ca80d9b17cdba4b0f9b117c92852ca04a697839',
+            'public_key': '',
+            'script': '76a9148ca80d9b17cdba4b0f9b117c92852ca04a69783988ac',
+            'script_type': 'p2pkh',
+            'spending_index_n': None,
+            'spending_txid': '',
+            'spent': False,
+            'value': 87600
+        },
+        {
+            'address': 'bc1qjhm0h7vhdyu0d0luv34dlz654rmsvg8twywk99',
+            'output_n': 1,
+            'public_hash': '95f6fbf9976938f6bffc646adf8b54a8f70620eb',
+            'public_key': '',
+            'script': '001495f6fbf9976938f6bffc646adf8b54a8f70620eb',
+            'script_type': 'p2wpkh',
+            'spending_index_n': None,
+            'spending_txid': '',
+            'spent': False,
+            'value': 81857
+        }
     ],
     'raw': '0100000002c845e228b169e8713414f51f5a60a1c670aaf57138811279ddc3b530fe4c4ac8000000001976a91495f6fbf9976938f6bffc646adf8b54a8f70620eb88acffffffffa3d781905b0122466f72efa1f751cf8e2cb9f6fda8efedf989443bd358ec5f480000000000ffffffff0230560100000000001976a9148ca80d9b17cdba4b0f9b117c92852ca04a69783988acc13f01000000000016001495f6fbf9976938f6bffc646adf8b54a8f70620eb00000000',
     'size': 182,
