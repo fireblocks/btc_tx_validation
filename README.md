@@ -349,19 +349,19 @@ Let's try to understand what’s going on here:
 Basically, the raw transaction does include a previous transaction hash but does not contain any information about the amount of this input.
 In order to get the amounts we need to somehow get the list of unspent transaction outputs for our source address.
 Here we are using the Fireblocks API, specifically [list unspent transaction outputs endoint](https://developers.fireblocks.com/reference/get_vault-accounts-vaultaccountid-assetid-unspent-inputs).
-But it's not mandatory and any external API that provides that info can be used here.
+But it's not mandatory and any external API that provides that info can be used here:
 ```python
 tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
 ```
 
 
-Here we are iterating through the entire ```rawTx``` array that contains all the inputs of our transaction.
+Iterating through the entire ```rawTx``` array that contains all the inputs of our transaction:
 ```python
 for i, raw_input in enumerate(self.raw_tx):
 ```
 
 
-Parsing the raw transaction hex by using the bitcoinlib library.
+Parsing the raw transaction hex by using the bitcoinlib library:
 ```python 
 parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
                 raw_input["rawTx"], strict=False
