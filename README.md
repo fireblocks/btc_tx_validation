@@ -345,25 +345,29 @@ def validate_legacy_tx(self):
 
 Let's try to understand what’s going on here:
 
-```python
-tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
-```
+
 Basically, the raw transaction does include a previous transaction hash but does not contain any information about the amount of this input.
 In order to get the amounts we need to somehow get the list of unspent transaction outputs for our source address.
 Here we are using the Fireblocks API, specifically [list unspent transaction outputs endoint](https://developers.fireblocks.com/reference/get_vault-accounts-vaultaccountid-assetid-unspent-inputs).
 But it's not mandatory and any external API that provides that info can be used here.
+```python
+tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
+```
 
+
+Here we are iterating through the entire ```rawTx``` array that contains all the inputs of our transaction.
 ```python
 for i, raw_input in enumerate(self.raw_tx):
 ```
-Here we are iterating through the entire ```rawTx``` array that contains all the inputs of our transaction.
 
+
+Parsing the raw transaction hex by using the bitcoinlib library.
 ```python 
 parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
                 raw_input["rawTx"], strict=False
             ).as_dict()
 ```
-Parsing the raw transaction hex by using the bitcoinlib library. It should look similar to:
+It should look similar to:
 ```
 {
     'block_hash': None,
@@ -474,12 +478,15 @@ Parsing the raw transaction hex by using the bitcoinlib library. It should look 
 Inputs and Ouputs arrays is actually what we're looking for.
 
 
+Once we have the parsed transaction we can compare the number of inputs in it and the number of inputs in our callback payload. It has to be exactly the same number. If not - we are throwing an error:
 ```python
 if len(self.raw_tx) != len(parsed_tx['inputs']):
     raise bitcoinlib.transactions.TransactionError("Number of inputs in the parsed tx doesn't match")
 ```
-Once we have the parsed transaction we can compare the number of inputs in it and the number of inputs in our callback payload. It has to be exactly the same number. If not - we are throwing an error.
 
+
+We need to find the amount for each input in the parsed transaction therefore we are looking for it in our transaction references that we quiried via Fireblocks API before by using the ```find_tx_ref``` utility function.
+If the input is no found we throw an error, else we are saving the previous transaction hash as key and the amount as the value in our ```filtered_tx_refs``` dictionary. Also we are saving the total amount of all the inputs in the same dictionary:
 ```python
  tx_ref = BitcoinUtils.find_tx_ref(
                     parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
@@ -490,21 +497,22 @@ Once we have the parsed transaction we can compare the number of inputs in it an
                 raise bitcoinlib.transactions.TransactionError(
                     "Input hash does not exits in transaction refs")
 ```
-We need to find the amount for each input in the parsed transaction therefore we are looking for it in our transaction references that we quiried via Fireblocks API before by using the ```find_tx_ref``` utility function.
-If the input is no found we throw an error, else we are saving the previous transaction hash as key and the amount as the value in our ```filtered_tx_refs``` dictionary. Also we are saving the total amount of all the inputs in the same dictionary.
 
+
+Similar logic for the outputs as well:
 ```python
 tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
 tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
 ```
-Similar logic for the outputs as well
 
+
+Here we are just getting the transaction fee value, the transaction amount and the transaction destination from our callback payload:
 ```python
 tx_fee = int(float(self.metadata["fee"]) * 10**8)
 metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
 metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
 ```
-Here we are just getting the transaction fee value, the transaction amount and the transaction destination from our callback payload.
+
 
 Now, after having all the parsed inputs, outputs and their amounts and by also having the transaction fee, amount and the destination from our callback payload, we can actually apply our approval logic:
 ```python
