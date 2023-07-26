@@ -531,6 +531,6 @@ So the logic is quite simple. It has 4 conditions and will return False (reject)
 1. The number of destinations in the parsed outputs greater than 2 (1 is our destination address and the second is change in case it exists)
 2. Our destination address does not exist in the parsed transaction outputs 
 3. The amount that we are trying to send is different from the parsed transaction output value
-4. The total inputs amount minus the total outputs amount - transaction fee is greated than 0
+4. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0 
 
 If none of these conditions were met, we will return True and basically approve the legacy transaction signing.
