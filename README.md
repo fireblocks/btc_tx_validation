@@ -307,40 +307,40 @@ So actually what happens here is that instead of trying to identify whether the 
 
 As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
 ```python
-    def validate_legacy_tx(self):
-        tx_outputs = {"total_outputs_amount": 0}
-        filtered_tx_refs = {"total_inputs_amount": 0}
-        tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
-        for i, raw_input in enumerate(self.raw_tx):
-            parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
-                raw_input["rawTx"], strict=False
-            ).as_dict()
-            if len(self.raw_tx) != len(parsed_tx['inputs']):
-                raise bitcoinlib.transactions.TransactionError("Number of inputs in the parsed tx doesn't match")
-            tx_ref = BitcoinUtils.find_tx_ref(
-                    parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
-            if tx_ref is not None:
-                filtered_tx_refs["total_inputs_amount"] += int(
-                    float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-            else:
-                raise bitcoinlib.transactions.TransactionError(
-                    "Input hash does not exits in transaction refs")
-            tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-            tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+def validate_legacy_tx(self):
+    tx_outputs = {"total_outputs_amount": 0}
+    filtered_tx_refs = {"total_inputs_amount": 0}
+    tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
+    for i, raw_input in enumerate(self.raw_tx):
+        parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
+            raw_input["rawTx"], strict=False
+        ).as_dict()
+        if len(self.raw_tx) != len(parsed_tx['inputs']):
+            raise bitcoinlib.transactions.TransactionError("Number of inputs in the parsed tx doesn't match")
+        tx_ref = BitcoinUtils.find_tx_ref(
+                parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
+        if tx_ref is not None:
+            filtered_tx_refs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+            filtered_tx_refs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+        else:
+            raise bitcoinlib.transactions.TransactionError(
+                "Input hash does not exits in transaction refs")
+        tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+        tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
 
-        tx_fee = int(float(self.metadata["fee"]) * 10**8)
-        metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
-        metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
-        if (
-            metadata_destination not in tx_outputs
-            or metadata_amount != tx_outputs[metadata_destination]
-            or filtered_tx_refs["total_inputs_amount"]
-            - tx_outputs["total_outputs_amount"]
-            - tx_fee
-            > 0
-        ):
-            return False
-        return True
+    tx_fee = int(float(self.metadata["fee"]) * 10**8)
+    metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
+    metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
+    if (
+        metadata_destination not in tx_outputs
+        or metadata_amount != tx_outputs[metadata_destination]
+        or filtered_tx_refs["total_inputs_amount"]
+        - tx_outputs["total_outputs_amount"]
+        - tx_fee
+        > 0
+    ):
+        return False
+    return True
 ```
 
 Let's try to understand what’s going on here:
@@ -352,3 +352,177 @@ Basically, the raw transaction does include a previous transaction hash but does
 In order to get the amounts we need to somehow get the list of unspent transaction outputs for our source address.
 Here we are using the Fireblocks API, specifically [list unspent transaction outputs endoint](https://developers.fireblocks.com/reference/get_vault-accounts-vaultaccountid-assetid-unspent-inputs).
 But it's not mandatory and any external API that provides that info can be used here.
+
+```python
+for i, raw_input in enumerate(self.raw_tx):
+```
+Here we are iterating through the entire ```rawTx``` array that contains all the inputs of our transaction.
+
+```python 
+parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
+                raw_input["rawTx"], strict=False
+            ).as_dict()
+```
+Parsing the raw transaction hex by using the bitcoinlib library to a dictionary. It looks like that:
+
+```
+{
+    'block_hash': None,
+    'block_height': None,
+    'coinbase': False,
+    'confirmations': None,
+    'date': None,
+    'fee': None,
+    'fee_per_kb': None,
+    'flag': None,
+    'input_total': 0,
+    'inputs': [
+        {
+            'address': '',
+            'compressed': True,
+            'double_spend': False,
+            'encoding': 'base58',
+            'index_n': 0,
+            'locktime_cltv': None,
+            'locktime_csv': None,
+            'output_n': 0,
+            'prev_txid': 'c84a4cfe30b5c3dd7912813871f5aa70c6a1605a1ff5143471e869b128e245c8',
+            'public_hash': '',
+            'public_keys': [],
+            'redeemscript': '',
+            'script': '76a91495f6fbf9976938f6bffc646adf8b54a8f70620eb88ac',
+            'script_code': '',
+            'script_type': 'p2pkh',
+            'sequence': 4294967295,
+            'signatures': [],
+            'sigs_required': 1,
+            'sort': False,
+            'unlocking_script': '76a91495f6fbf9976938f6bffc646adf8b54a8f70620eb88ac',
+            'unlocking_script_unsigned': '',
+            'valid': None,
+            'value': 0,
+            'witness': '',
+            'witness_type': 'legacy'
+        },
+        {
+            'address': '',
+            'compressed': True,
+            'double_spend': False,
+            'encoding': 'base58',
+            'index_n': 1,
+            'locktime_cltv': None,
+            'locktime_csv': None,
+            'output_n': 0,
+            'prev_txid': '485fec58d33b4489f9edefa8fdf6b92c8ecf51f7a1ef726f4622015b9081d7a3',
+            'public_hash': '',
+            'public_keys': [],
+            'redeemscript': '',
+            'script': '',
+            'script_code': '',
+            'script_type': 'sig_pubkey',
+            'sequence': 4294967295,
+            'signatures': [],
+            'sigs_required': 1,
+            'sort': False,
+            'unlocking_script': '',
+            'unlocking_script_unsigned': '',
+            'valid': None,
+            'value': 0,
+            'witness': '',
+            'witness_type': 'legacy'
+        }
+    ],
+    'locktime': 0,
+    'network': 'bitcoin',
+    'output_total': 169457,
+    'outputs': [
+                {
+                    'address': '1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC',
+                    'output_n': 0,
+                    'public_hash': '8ca80d9b17cdba4b0f9b117c92852ca04a697839',
+                    'public_key': '',
+                    'script': '76a9148ca80d9b17cdba4b0f9b117c92852ca04a69783988ac',
+                    'script_type': 'p2pkh',
+                    'spending_index_n': None,
+                    'spending_txid': '',
+                    'spent': False,
+                    'value': 87600},
+                    {'address': 'bc1qjhm0h7vhdyu0d0luv34dlz654rmsvg8twywk99',
+                    'output_n': 1,
+                    'public_hash': '95f6fbf9976938f6bffc646adf8b54a8f70620eb',
+                    'public_key': '',
+                    'script': '001495f6fbf9976938f6bffc646adf8b54a8f70620eb',
+                    'script_type': 'p2wpkh',
+                    'spending_index_n': None,
+                    'spending_txid': '',
+                    'spent': False,
+                    'value': 81857
+                }
+    ],
+    'raw': '0100000002c845e228b169e8713414f51f5a60a1c670aaf57138811279ddc3b530fe4c4ac8000000001976a91495f6fbf9976938f6bffc646adf8b54a8f70620eb88acffffffffa3d781905b0122466f72efa1f751cf8e2cb9f6fda8efedf989443bd358ec5f480000000000ffffffff0230560100000000001976a9148ca80d9b17cdba4b0f9b117c92852ca04a69783988acc13f01000000000016001495f6fbf9976938f6bffc646adf8b54a8f70620eb00000000',
+    'size': 182,
+    'status': 'new',
+    'txhash': '',
+    'txid': 'd534a415ed84b830db38ab05dc66b99f553254020e8a792a35eba2c7dcffcf1d',
+    'verified': False,
+    'version': 1,
+    'vsize': 182,
+    'witness_type': 'legacy'
+}
+```
+Inputs and Ouputs arrays is actually what we're looking for.
+
+
+```python
+if len(self.raw_tx) != len(parsed_tx['inputs']):
+    raise bitcoinlib.transactions.TransactionError("Number of inputs in the parsed tx doesn't match")
+```
+Once we have the parsed transaction we can compare the number of inputs in it and the number of inputs in our callback payload. It has to be exactly the same number. If not - we are throwing an error.
+
+```python
+ tx_ref = BitcoinUtils.find_tx_ref(
+                    parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
+            if tx_ref is not None:
+                filtered_tx_refs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+                filtered_tx_refs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+            else:
+                raise bitcoinlib.transactions.TransactionError(
+                    "Input hash does not exits in transaction refs")
+```
+We need to find the amount for each input in the parsed transaction therefore we are looking for it in our transaction references that we quiried via Fireblocks API before by using the ```find_tx_ref``` utility function.
+If the input is no found we throw an error, else we are saving the previous transaction hash as key and the amount as the value in our ```filtered_tx_refs``` dictionary. Also we are saving the total amount of all the inputs in the same dictionary.
+
+```python
+tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+```
+Similar logic for the outputs as well
+
+```python
+tx_fee = int(float(self.metadata["fee"]) * 10**8)
+metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
+metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
+```
+Here we are just getting the transaction fee value, the transaction amount and the transaction destination from our callback payload.
+
+Now, after having all the parsed inputs, outputs and their amounts and by also having the transaction fee, amount and the destination from our callback payload, we can actually apply our approval logic:
+```python
+if (
+    len(tx_outputs) > 2
+    or
+    metadata_destination not in tx_outputs
+    or metadata_amount != tx_outputs[metadata_destination]
+    or filtered_tx_refs["total_inputs_amount"]
+    - tx_outputs["total_outputs_amount"]
+    - tx_fee
+    > 0
+):
+    return False
+```
+So the logic is quite simple and has 4 conditions and will return False (reject) if:
+1. The number of destinations in the parsed outputs greater than 2 (1 is our destination address and the second is change in case it exists)
+2. Our destination address does not exist in the parsed transaction outputs 
+3. The amount that we are trying to send is different from the parsed transaction output value
+4. The total inputs amount minus the total outputs amount - transaction fee is greated than 0
+
+If none of these conditions were met, we will return True and basically approve the legacy transaction signing.
