@@ -345,5 +345,10 @@ As mentioned above, we are going to use bitcoinlib for legacy transactions and o
 
 Let's try to understand what’s going on here:
 
-
-
+```python
+tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
+```
+Basically, the raw transaction does include a previous transaction hash but does not contain any information about the amount of this input.
+In order to get the amounts we need to somehow get the list of unspent transaction outputs for our source address.
+Here we are using the Fireblocks API, specifically [list unspent transaction outputs endoint](https://developers.fireblocks.com/reference/get_vault-accounts-vaultaccountid-assetid-unspent-inputs).
+But it's not mandatory and any external API that provides that info can be used here.
