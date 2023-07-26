@@ -486,16 +486,15 @@ if len(self.raw_tx) != len(parsed_tx['inputs']):
 
 
 We need to find the amount for each input in the parsed transaction therefore we are looking for it in our transaction references that we quiried via Fireblocks API before by using the ```find_tx_ref``` utility function.
-If the input is no found we throw an error, else we are saving the previous transaction hash as key and the amount as the value in our ```filtered_tx_refs``` dictionary. Also we are saving the total amount of all the inputs in the same dictionary:
+If the input is not found we throw an error, else we are saving the previous transaction hash as key and the amount as the value in our ```filtered_tx_refs``` dictionary. Also we are saving the total amount of all the inputs in the same dictionary:
 ```python
- tx_ref = BitcoinUtils.find_tx_ref(
-                    parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
-            if tx_ref is not None:
-                filtered_tx_refs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-                filtered_tx_refs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-            else:
-                raise bitcoinlib.transactions.TransactionError(
-                    "Input hash does not exits in transaction refs")
+tx_ref = BitcoinUtils.find_tx_ref(parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
+if tx_ref is not None:
+    filtered_tx_refs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+    filtered_tx_refs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+else:
+    raise bitcoinlib.transactions.TransactionError(
+        "Input hash does not exits in transaction refs")
 ```
 
 
