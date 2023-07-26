@@ -363,8 +363,7 @@ parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
                 raw_input["rawTx"], strict=False
             ).as_dict()
 ```
-Parsing the raw transaction hex by using the bitcoinlib library to a dictionary. It looks like that:
-
+Parsing the raw transaction hex by using the bitcoinlib library. It should look similar to:
 ```
 {
     'block_hash': None,
