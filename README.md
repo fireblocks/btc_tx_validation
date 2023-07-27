@@ -351,7 +351,7 @@ def parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs):
     return parsed_tx
 ```
 
-As mentioned before, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
+As mentioned before, we are using bitcoinlib for legacy transactions:
 ```python
 from decimal import Decimal
 
@@ -370,27 +370,26 @@ def validate_legacy_tx(self):
         metadata_amount -= tx_fee
 
     if (
-            metadata_destination not in parsed_tx_outputs
-            or metadata_amount != parsed_tx_outputs[metadata_destination]
-            or sum(tx["amount"] for tx in parsed_txs[0]['inputs'])
-            - parsed_tx_outputs["total_outputs_amount"] - tx_fee > 0
+        metadata_destination not in parsed_tx_outputs
+        or metadata_amount != parsed_tx_outputs[metadata_destination]
+        or sum(tx["amount"] for tx in parsed_txs[0]['inputs'])
+        - parsed_tx_outputs["total_outputs_amount"] - tx_fee > 0
     ):
         return False
     return True
 ```
 
-Let's try to understand what’s going on here:
+Let's try to understand what is going on here:
 
 First of all we are trying to parse the first raw input with bitcoinlib.\
-If it will raise exception, we know that this is NOT a legacy transaction and we'll move on to SegWit validation:
+If it will raise exception, we'll know that this is NOT a legacy transaction and we'll move on to SegWit validation:
 ```python
 bitcoinlib.transactions.Transaction.parse_hex(self.metadata["rawTx"][0]["rawTx"], strict=False).as_dict()
 ```
 
-The raw transaction does include a previous transaction hash but does not contain any information about the amount of this input.
-In order to get the amounts we need to somehow get the list of unspent transaction outputs for our source address.
+The raw transaction does include a previous transaction hash but does not contain any information about the amount of this input. In order to get the amounts we need to somehow get the list of unspent transaction outputs for our source address. \
 Here we are using the Fireblocks API, specifically [list unspent transaction outputs endoint](https://developers.fireblocks.com/reference/get_vault-accounts-vaultaccountid-assetid-unspent-inputs).
-But it's not mandatory and any external API that provides that info can be used here.
+But it's not mandatory and any external API that provides that info can be used here.\
 In addition we are checking the number of raw inputs in our payload:
 ```python
 tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
@@ -398,8 +397,7 @@ num_of_inputs = len(self.metadata['rawTx'])
 ```
 
 Iterating through the entire ```rawTx``` list that contains all the inputs of our transaction and parsing each by using the ```parse_legacy_tx_input``` function.\
-The function ```parse_legacy_tx_input``` takes a raw input of a legacy transaction, along with the transaction references (```tx_refs```) and the total number of inputs in the transaction (```num_of_inputs```). Its purpose is to parse and enrich the raw input data by fetching additional information from the ```tx_refs``` and replacing the original amount field in each input with the accurate amount in satoshis.
-:
+The function ```parse_legacy_tx_input``` takes a raw input of a legacy transaction, along with the transaction references (```tx_refs```) and the total number of inputs in the transaction (```num_of_inputs```). Its purpose is to parse and enrich the raw input data by fetching additional information from the ```tx_refs``` and replacing the original amount field in each input with the accurate amount in satoshis:
 ```python
 parsed_txs = [parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs) for raw_input in self.metadata["rawTx"]]
 ```
@@ -515,7 +513,7 @@ Parsing the raw transaction hex by using the bitcoinlib library should yield a r
 ```inputs``` and ```ouputs``` lists are actually what we're looking for.
 
 
-The ```parse_legacy_tx_output``` function takes a single parsed legacy transaction input (parsed_tx), which is represented as a dictionary, and its purpose is to extract and organize information about the outputs of the legacy transaction.
+The ```parse_legacy_tx_output``` function takes a single parsed legacy transaction input (parsed_tx), which is represented as a dictionary, and its purpose is to extract and organize information about the outputs of the legacy transaction:
 ```python
 parsed_tx_outputs = parse_legacy_tx_output(parsed_txs[0])
 ```
@@ -534,10 +532,10 @@ if len(parsed_txs[0]["outputs"]) == 1:
 ```
 
 And finally we are checking the values and decide if we approve this transaction or not.\
-The logic is quite simple - it has 3 conditions and will return False (reject) if:\
-1. Our destination address does not exist in the parsed transaction outputs.\
-2. The amount that we are trying to send is different from the parsed transaction output value.\
-3. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0
+The logic is quite simple - it has 3 conditions and will return False (reject) if:
+1. Our destination address does not exist in the parsed transaction outputs.
+2. The amount that we are trying to send is different from the parsed transaction output value.
+3. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0.\
 ```python
 if (
     metadata_destination not in parsed_tx_outputs
