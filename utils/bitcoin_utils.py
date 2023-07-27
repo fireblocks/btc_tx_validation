@@ -87,7 +87,7 @@ def serialize_output(to_address, amount):
             output_buffer += bytearray(pubkey)
             output_buffer.append(OP_EQUAL)
         else:
-            assert False
+            assert False, "Destination address is in unknown format"
     return output_buffer
 
 
