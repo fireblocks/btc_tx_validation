@@ -649,8 +649,8 @@ def serialize_output(to_address, amount):
 ```
 
 In addition, we'll need 2 more functions:  
-A hashing function - this function will apply double SHA256 algorithm as required in Bitcoin.
-A reversing function that will returned the reversed bytes (Bitcoin uses little endian system).
+A hashing function - this function will apply double SHA256 algorithm as required in Bitcoin.\
+A reversing function that will returned the reversed bytes (Bitcoin uses little endian system).\
 ```python
 import hashlib
 
