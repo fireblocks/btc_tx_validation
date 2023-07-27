@@ -1,0 +1,6 @@
+base58>=2.1.1
+bech32>=1.2.0
+bitcoinlib>=0.6.11
+fireblocks-sdk>=1.21.0
+Flask>=2.3.2
+PyJWT>=2.7.0
