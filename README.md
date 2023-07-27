@@ -12,7 +12,10 @@ SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9
 
 Kindly note that this code should be referenced as an example only.
 
-Source code can be found [here](https://github.com/SlavaSereb/btc_validation)
+Source code can be found [here](https://github.com/SlavaSereb/btc_validation).\
+
+
+### Note - Please make sure to update ```fireblocks.py``` with your API key and path to the API secret key.
 
 ## BTC callback payload example
 
