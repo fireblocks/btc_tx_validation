@@ -222,15 +222,9 @@ if __name__ == "__main__":
 ```
 
 ## Creating helpers
-Let's define 2 exceptions:
+Let's define a custom exception:
 
 ```python
-class SegwitTransactionValidationException(Exception):
-    def __init__(self, msg: str):
-        self.message = msg
-        super().__init__(self.message)
-
-
 class LegacyTransactionValidationException(Exception):
     def __init__(self, msg: str):
         self.message = msg
@@ -325,6 +319,7 @@ So actually what happens here is that instead of trying to identify whether the 
 As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
 ```python
 def validate_legacy_tx(self):
+    parsed_tx = None
     parsed_tx_outputs = {"total_outputs_amount": 0}
     parsed_tx_inputs = {"total_inputs_amount": 0}
     tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
@@ -332,27 +327,28 @@ def validate_legacy_tx(self):
         parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False).as_dict()
         if len(self.raw_tx) != len(parsed_tx['inputs']):
             raise LegacyTransactionValidationException("Number of inputs in the parsed tx doesn't match")
-        tx_ref = BitcoinUtils.find_tx_ref(
-                parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
+        tx_ref = find_tx_ref(
+            parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
         if tx_ref is not None:
             parsed_tx_inputs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
             parsed_tx_inputs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
         else:
             raise LegacyTransactionValidationException("Input hash does not exits in transaction refs")
+    for i, parsed_output in enumerate(parsed_tx["outputs"]):
         parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
         parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
-
-    tx_fee = int(float(self.metadata["fee"]) * 10**8)
-    metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
+    tx_fee = int(float(self.metadata["fee"]) * 10 ** 8)
+    metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10 ** 8
+    if len(parsed_tx["outputs"]) == 1:
+        metadata_amount -= tx_fee
     metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
-
     if (
-        metadata_destination not in parsed_tx_outputs
-        or metadata_amount != parsed_tx_outputs[metadata_destination]
-        or parsed_tx_inputs["total_inputs_amount"]
-        - parsed_tx_outputs["total_outputs_amount"]
-        - tx_fee
-        > 0
+            metadata_destination not in parsed_tx_outputs
+            or metadata_amount != parsed_tx_outputs[metadata_destination]
+            or parsed_tx_inputs["total_inputs_amount"]
+            - parsed_tx_outputs["total_outputs_amount"]
+            - tx_fee
+            > 0
     ):
         return False
     return True
@@ -513,17 +509,21 @@ else:
 ```
 
 
-Similar logic for the outputs as well:
+Iterate through the parsed outputs and saving in a dictionary with the corresponding amount and also the total output amount:
 ```python
-parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+for i, parsed_output in enumerate(parsed_tx["outputs"]):
+    parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+    parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
 ```
 
 
-Here we are just getting the transaction fee value, the transaction amount and the transaction destination from our callback payload:
+Here we are just getting the transaction fee value, the transaction amount and the transaction destination from our callback payload.
+In addition, we are checking whether the transaction has 1 output only and deducting the fee from the total amount (no change in that case):
 ```python
 tx_fee = int(float(self.metadata["fee"]) * 10**8)
 metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
+if len(parsed_tx["outputs"]) == 1:
+    metadata_amount -= tx_fee
 metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
 ```
 
@@ -558,7 +558,7 @@ We are going to parse SegWit transactions without any external library. This is 
 01000000b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632adf0c9e8670413c6c965f9e2a8de2bf881512b8e7ebc067cbf6078d20c18f86086000000001976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac50c3000000000000fffffffff04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba10000000001000000
 ```
 
-After manual parsing(can be found as Native P2WPKH hash preimage in [here]:(https://en.bitcoin.it/wiki/BIP_0143)):
+After manual parsing (can be found as Native P2WPKH hash preimage in [here]:(https://en.bitcoin.it/wiki/BIP_0143)):
 ```
 nVersion:     01000000
 hashPrevouts: b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195
@@ -573,7 +573,7 @@ nLockTime:    00000000
 nHashType:    01000000
 ```
 
-While the scriptCode (```1976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac```) is:
+While the ```scriptCode (1976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac)``` is:
 ```
 scriptSize:       19 (1 byte)
 OP_DUP:           76 (1 byte)
@@ -584,15 +584,18 @@ OP_EQUALVERIFY:   88 (1 byte)
 OP_CHECKSIG:      ac (1 byte)
 ```
 
-We can write a few utility functions that will help us to parse this raw payload.
-The first one is ```parseP2WPKHScript``` which will receive the scriptCode (without the size byte), parse it and will return the pubkeyHash:
+Let's define the OP codes as global constants so we can use it later in different parts of our code:
 ```python
 OP_DUP = 0x76
 OP_EQUAL = 0x87
 OP_EQUALVERIFY = 0x88
 OP_HASH160 = 0xA9
 OP_CHECKSIG = 0xAC
+```
 
+We can write a few utility functions that will help us to parse this raw payload.
+The first one is ```parseP2WPKHScript``` which will receive the scriptCode (without the size byte), parse it and will return the pubkeyHash:
+```python
 def parseP2WPKHScript(script_code):
     assert script_code[0] == OP_DUP, "byte 0 is not OP_DUP"
     assert script_code[1] == OP_HASH160, "byte 1 is not OP_HASH160"
@@ -605,34 +608,159 @@ def parseP2WPKHScript(script_code):
 
 Next we'll need a utility function that will be able to verify that the encoded pubkey hash and the address that spends the input are the same:
 ```python
+import base58
+import bech32
+
 def verify_address(address, pubkey_hash):
     if address.startswith("bc1"):
-        assert address == bech32.encode("bc", 0, pubkey_hash), "Segwit addresses don't match"
+        assert(address == bech32.encode('bc', 0, pubkey_hash)),\
+            "The provided SegWit address and parsed pubkey are different"
     else:
-        assert address == base58.b58encode_check(b"\x00" + pubkey_hash).decode(), "Legacy addresses don't match"
+        assert(address == base58.b58encode_check(b'\x00' + pubkey_hash).decode()), \
+            "The provided Legacy address and parsed pubkey are different"
 ``` 
 
-Let's implement our validate_segwit_tx method and see what additional utility method we'll need there:
+Another function that we'll need here is an output serialization function. This function is required since the raw input payload does not contain any information about the destination(s) and the amount(s). The only thing that it actually has is the hash of all the serialized outputs. 
+So we need a function that will create a serialized output hash based on the information we know (destination addresses and amounts) and then we'll be able to compare it with the parsed output hash:
+```python
+def serialize_output(to_address, amount):
+    output_buffer = bytearray()
+    output_buffer += int(amount).to_bytes(8, "little")
+    if to_address.startswith("bc1"):
+        version, pubkey = bech32.decode("bc", to_address)
+        output_buffer.append(0x16)
+        output_buffer.append(version)
+        output_buffer.append(0x14)
+        output_buffer += bytearray(pubkey)
+    else:
+        addr = base58.b58decode_check(to_address)
+        addrType = addr[0]
+        pubkey = addr[1:]
+        if addrType == 0:  # P2PKH
+            output_buffer.append(0x19)
+            output_buffer.append(OP_DUP)
+            output_buffer.append(OP_HASH160)
+            output_buffer.append(20)
+            output_buffer += bytearray(pubkey)
+            output_buffer.append(OP_EQUALVERIFY)
+            output_buffer.append(OP_CHECKSIG)
+        elif addrType == 5:  # P2SH
+            output_buffer.append(0x17)
+            output_buffer.append(OP_HASH160)
+            output_buffer.append(20)
+            output_buffer += bytearray(pubkey)
+            output_buffer.append(OP_EQUAL)
+        else:
+            assert False, "Destination address is in unknown format"
+    return output_buffer
+```
+
+In addition, we'll need 2 more functions:  
+1. A hashing function - this function will apply double SHA256 algorithm as required in Bitcoin
+2. A reversing function that will returned the reversed bytes (Bitcoin uses little endian system)
+```python
+import hashlib
+
+def double_sha(buffer):
+    return hashlib.sha256(hashlib.sha256(buffer_to_hash).digest()).digest()
+
+def parse_hash(bytes_to_parse):
+    bytes_to_parse.reverse()
+    return bytes_to_parse
+```
+
+Last but not least utility function is ```verify_single_segwit_input``` that actually parses the raw input.
+This function expects to get the raw input, transaction references and the double SHA256 of the serialized outputs.
+The function parses the relevant parts of the transaction and raises an ```AssertionError``` in case there is some unexpected mismatch:
+```python
+def verify_single_segwit_input(raw_input, tx_refs, output_hash):
+    input_hash = parse_hash(raw_input[68: 100])
+    input_index = int.from_bytes(raw_input[100: 104], "little")
+    script_size = raw_input[104]
+    pubkey_hash = parseP2WPKHScript(raw_input[105: 130])
+    sequence = int.from_bytes(raw_input[138:142], "little")
+    outputs_hash = raw_input[142: 174]
+    locktime = int.from_bytes(raw_input[174: 178], "little")
+    sighash = int.from_bytes(raw_input[178: 182], "little")
+    tx_ref_index = find_tx_ref(input_hash.hex(), input_index, tx_refs)
+    assert tx_ref_index is not None, "Input hash does not exits in transaction refs"
+    tx_ref = tx_refs[tx_ref_index]
+    verify_address(tx_ref["address"], pubkey_hash)
+    amount = int.from_bytes(raw_input[130:138], "little")
+    assert script_size == 0x19, "Script size is not 25 bytes"
+    assert amount == int(float(tx_ref["amount"]) * 10 ** 8), "The provided amount is different from the parsed amount"
+    assert sequence == 0xFFFFFFFF, "Sequence is not -1"  # fireblocks currently uses sequence -1
+    assert outputs_hash == output_hash, "The provided destinations are different from the parsed outputs"
+    assert locktime == 0, "Lock time is not 0"  # fireblocks currently doesn't set locktime
+    assert sighash == 1, "Sighash is not 1"  # the current protocol version  is 1
+```
+
+
+Let's implement our ```validate_segwit_tx``` method in the ```BitcoinValidator``` class:
 ```python
 def validate_segwit_tx(self):
+    total_amount = 0
     source_vault_account_id = self.metadata["sourceId"]
     tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
-    total_amount = 0
-    inputs = bytearray()
     for input_to_sign in self.metadata["rawTx"]:
         raw_input = bytearray.fromhex(input_to_sign["rawTx"])
-        parsed_input_hash = raw_input[68:100]
-        parsed_input_index = int.from_bytes(raw_input[100:104], "little")
-        inputs += serializeInputPoint(parsed_input_hash, parsed_input_index)
         total_amount += int.from_bytes(raw_input[130:138], "little")
-    payload_amount = int(float(self.metadata["requestedAmountStr"]) * 10 ** 8)
-    changeAmount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
-    outputs = serializeOutput(self.metadata["destAddress"], payload_amount)
-    if changeAmount > 0:
+    payload_amount = int(float(self.metadata["destinations"][0]["amountNative"]) * 10 ** 8)
+    change_amount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
+    if change_amount < 0:
+        payload_amount -= int(float(self.metadata["fee"]) * 10 ** 8)
+    outputs = serialize_output(self.metadata["destAddress"], payload_amount)
+    if change_amount > 0:
         change_address = self.fireblocks.get_change_address(source_vault_account_id)
-        outputs += serializeOutput(change_address, changeAmount)
+        outputs += serialize_output(change_address, change_amount)
     for input_to_sign in self.metadata["rawTx"]:
-        rawTx = bytearray.fromhex(input_to_sign["rawTx"])
-        verifySingleSegwitTx(rawTx, tx_refs, doubleSHA(outputs))
+        try:
+            verify_single_segwit_input(bytearray.fromhex(input_to_sign['rawTx']), tx_refs, double_sha(outputs))
+        except AssertionError as e:
+            print(e)
+            return False
     return True
+```
+### What is actually going on here?
+
+Here we are getting the source vault account from our callback payload and calling Fireblocks to get the unspent transaction input for this vault:
+```python
+source_vault_account_id = self.metadata["sourceId"]
+tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
+```
+
+Then, for each raw input to sign, we are parsing the amount of the input and adding it to the total amount.
+We are getting the amount that we got in our callback payload and calculating the change amount:
+```python
+for input_to_sign in self.metadata["rawTx"]:
+    raw_input = bytearray.fromhex(input_to_sign["rawTx"])
+    total_amount += int.from_bytes(raw_input[130:138], "little")
+    payload_amount = int(float(self.metadata["destinations"][0]["amountNative"]) * 10 ** 8)
+    change_amount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
+```
+
+If the change amount smaller than 0 it means that we are in a full balance transcation scenario, hence we need to deduct the fee from the amount we got in the callback.
+In that case there will be only one output and we can actually serialize it by calling the ```serialize_output``` utility function we defined before.
+If the change amount is greater than 0 it means that we have at least 2 outputs and we need to serialize the change output as well.
+The change is always sent to the permnanent segwit address of the vault (index=0, change=0) so that's we are calling Fireblocks to actually get the change address for serialization:
+```python
+if change_amount < 0:
+    payload_amount -= int(float(self.metadata["fee"]) * 10 ** 8)
+outputs = serialize_output(self.metadata["destAddress"], payload_amount)
+if change_amount > 0:
+    change_address = self.fireblocks.get_change_address(source_vault_account_id)
+    outputs += serialize_output(change_address, change_amount)
+```
+
+In the last piece of code here we are iterating through all of our inputs to sign and verifying it with the ```verify_single_segwit_input``` method. 
+Please note that we need to pass the output hash here, therefore we are applying double SHA256 to the serialized outputs. If ```verify_single_segwit_input``` will raise an ```AssertionError``` we fail the validation
+else we return ```True``` and the validation has passed:
+```python
+for input_to_sign in self.metadata["rawTx"]:
+    try:
+        verify_single_segwit_input(bytearray.fromhex(input_to_sign['rawTx']), tx_refs, double_sha(outputs))
+    except AssertionError as e:
+        print(e)
+        return False
+return True
 ```
