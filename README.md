@@ -10,8 +10,9 @@ SegWit in a nutshell - an improvement over the current bitcoin blockchain which 
 Legacy addresses begin with 1 (for example: ```1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC```)\
 SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9xj7petf645z```)
 
-Kindly note that this code should be referenced as example only.
+Kindly note that this code should be referenced as an example only.
 
+Source code can be found [here](https://github.com/SlavaSereb/btc_validation)
 
 ## BTC callback payload example
 
