@@ -3,8 +3,8 @@ from fireblocks_sdk import FireblocksSDK
 
 class FireblocksClient:
     def __init__(self):
-        self.api_key = "66b36f2c-fac0-41f7-9cf9-bfa3e20f3f8f"
-        with open("/Users/slavaserebriannyi/api_keys/fireblocks_secret.key", "r") as kf:
+        self.api_key = "<your_api_key>"
+        with open("<path_to_your_api_key>", "r") as kf:
             self.secret_key = kf.read()
         self.client = FireblocksSDK(self.secret_key, self.api_key)
 
