@@ -17,6 +17,7 @@ Source code can be found [here](https://github.com/SlavaSereb/btc_validation).\
 
 ### Note - Please make sure to update ```fireblocks.py``` with your API key and path to the API secret key.
 
+
 ## BTC callback payload example
 
 ```json
