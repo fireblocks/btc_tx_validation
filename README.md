@@ -238,7 +238,7 @@ class LegacyTransactionValidationException(Exception):
 ```
 
 
-We will need to access Fireblocks API so let’s also define a FireblocksClient class:
+We will need to access Fireblocks API so let’s also define a FireblocksClient class. This class will have a few methods that we will use later on:
 ```python
 from fireblocks_sdk import FireblocksSDK
 
@@ -248,6 +248,16 @@ class FireblocksClient:
         with open("path_to_my_secret_key_file", "r") as kf:
             self.secret_key = kf.read()
         self.client = FireblocksSDK(self.secret_key, self.api_key)
+    
+    def get_tx_refs(self, vault_account_id):
+        return self.client.get_unspent_inputs(str(vault_account_id), "BTC")
+
+    def get_change_address(self, vault_account_id):
+        addresses = self.client.get_deposit_addresses(str(vault_account_id), "BTC")
+        for address in addresses:
+            if address["addressFormat"] == "SEGWIT" and address["type"] == "Permanent":
+                return address["address"]
+
 
 ```
 
@@ -542,14 +552,13 @@ If none of these conditions were met, we will return True and basically approve 
 
 ## Validating SegWit transaction
 
-We are going to parse SegWit transactions without any external library. This is how the SegWit raw transaction input looks like:
+We are going to parse SegWit transactions without any external library. This is how the SegWit raw transaction input looks like in the callback payload (for each UTXO):
 
-Provided by the callback:
 ```
 01000000b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632adf0c9e8670413c6c965f9e2a8de2bf881512b8e7ebc067cbf6078d20c18f86086000000001976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac50c3000000000000fffffffff04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba10000000001000000
 ```
 
-After parsing(can be found as Native P2WPKH hash preimage in [here]:(https://en.bitcoin.it/wiki/BIP_0143)):
+After manual parsing(can be found as Native P2WPKH hash preimage in [here]:(https://en.bitcoin.it/wiki/BIP_0143)):
 ```
 nVersion:     01000000
 hashPrevouts: b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195
@@ -575,4 +584,55 @@ OP_EQUALVERIFY:   88 (1 byte)
 OP_CHECKSIG:      ac (1 byte)
 ```
 
+We can write a few utility functions that will help us to parse this raw payload.
+The first one is ```parseP2WPKHScript``` which will receive the scriptCode (without the size byte), parse it and will return the pubkeyHash:
+```python
+OP_DUP = 0x76
+OP_EQUAL = 0x87
+OP_EQUALVERIFY = 0x88
+OP_HASH160 = 0xA9
+OP_CHECKSIG = 0xAC
 
+def parseP2WPKHScript(script_code):
+    assert script_code[0] == OP_DUP, "byte 0 is not OP_DUP"
+    assert script_code[1] == OP_HASH160, "byte 1 is not OP_HASH160"
+    assert script_code[2] == 20, "byte 2 is not 20" # 14 in hex is 20 in decimal
+    assert script_code[23] == OP_EQUALVERIFY, "byte 23 is not OP_EQUALVERIFY"
+    assert script_code[24] == OP_CHECKSIG, "byte 24 is not OP_CHECKSIG"
+    pubkey_hash = script_code[3:23]
+    return pubkey_hash
+```
+
+Next we'll need a utility function that will be able to verify that the encoded pubkey hash and the address that spends the input are the same:
+```python
+def verify_address(address, pubkey_hash):
+    if address.startswith("bc1"):
+        assert address == bech32.encode("bc", 0, pubkey_hash), "Segwit addresses don't match"
+    else:
+        assert address == base58.b58encode_check(b"\x00" + pubkey_hash).decode(), "Legacy addresses don't match"
+``` 
+
+Let's implement our validate_segwit_tx method and see what additional utility method we'll need there:
+```python
+def validate_segwit_tx(self):
+    source_vault_account_id = self.metadata["sourceId"]
+    tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
+    total_amount = 0
+    inputs = bytearray()
+    for input_to_sign in self.metadata["rawTx"]:
+        raw_input = bytearray.fromhex(input_to_sign["rawTx"])
+        parsed_input_hash = raw_input[68:100]
+        parsed_input_index = int.from_bytes(raw_input[100:104], "little")
+        inputs += serializeInputPoint(parsed_input_hash, parsed_input_index)
+        total_amount += int.from_bytes(raw_input[130:138], "little")
+    payload_amount = int(float(self.metadata["requestedAmountStr"]) * 10 ** 8)
+    changeAmount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
+    outputs = serializeOutput(self.metadata["destAddress"], payload_amount)
+    if changeAmount > 0:
+        change_address = self.fireblocks.get_change_address(source_vault_account_id)
+        outputs += serializeOutput(change_address, changeAmount)
+    for input_to_sign in self.metadata["rawTx"]:
+        rawTx = bytearray.fromhex(input_to_sign["rawTx"])
+        verifySingleSegwitTx(rawTx, tx_refs, doubleSHA(outputs))
+    return True
+```
