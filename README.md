@@ -614,7 +614,7 @@ def verify_address(address, pubkey_hash):
 ``` 
 
 Another function that we'll need here is an output serialization function. This function is required since the raw input payload does not contain any information about the destination(s) and the amount(s). The only thing that it actually has is the hash of all the serialized outputs. 
-So we need a function that will create a serialized output hash based on the information we know (destination addresses and amounts) and then we'll be able to compare it with the parsed output hash:
+So we need a function that will create a serialized output based on the information we know (destination addresses and amounts) and then we'll be able to hash all the serialized outputs and compare it with the parsed output hash:
 ```python
 def serialize_output(to_address, amount):
     output_buffer = bytearray()
