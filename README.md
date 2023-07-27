@@ -304,7 +304,7 @@ class BitcoinValidator:
             return self.validate_legacy_tx()
         except bitcoinlib.transactions.TransactionError:
             return self.validate_segwit_tx()
-        except (SegwitTransactionValidationException, LegacyTransactionValidationException, Exception):
+        except (LegacyTransactionValidationException, Exception):
             return False
 ```
 
