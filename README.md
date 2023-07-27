@@ -533,9 +533,9 @@ if len(parsed_txs[0]["outputs"]) == 1:
 
 And finally we are checking the values and decide if we approve this transaction or not.\
 The logic is quite simple - it has 3 conditions and will return False (reject) if:
-1. Our destination address does not exist in the parsed transaction outputs.
-2. The amount that we are trying to send is different from the parsed transaction output value.
-3. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0.\
+A. Our destination address does not exist in the parsed transaction outputs.
+B. The amount that we are trying to send is different from the parsed transaction output value.
+C. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0.\
 
 ```python
 if (
