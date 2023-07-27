@@ -2,13 +2,15 @@
 
 BTC transactions are more complex than ETH. This is due the UTXO (Unspent transaction output) model. In addition to the complex transaction model, BTC transactions can be of different types:
 
-Legacy transactions
+Legacy transactions\
 SegWit (Segregated Witness) transactions
 
-SegWit in a nutshell - it is an improvement over the current bitcoin blockchain which reduces the size needed to store transactions in a block. This is done by removing certain signatures with counting serialized witness data as one unit and core block data as four units.
+SegWit in a nutshell - an improvement over the current bitcoin blockchain which reduces the size needed to store transactions in a block. This is done by removing certain signatures with counting serialized witness data as one unit and core block data as four units.
 
-Legacy addresses begin with 1 (for example: ```1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC```)
+Legacy addresses begin with 1 (for example: ```1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC```)\
 SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9xj7petf645z```)
+
+Kindly note that this code should be referenced as example only.
 
 
 ## BTC callback payload example
@@ -70,14 +72,14 @@ SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9
 }
 ```
 
-We can see that unlike in ETH, we can have more than 1 object in the rawTx array. This is due to the fact that one needs to sign on every UTXO he spends, hence each object contains the specific UTXO data and the hash that needs to be signed. There are 2 UTXOs (inputs) In our example transaction.
+We can see that unlike in ETH, we can have more than 1 object in the rawTx array. This is due to the fact that one needs to sign on every UTXO he spends, hence each object contains the specific UTXO data and the hash that needs to be signed. There are 2 UTXOs (inputs) in our example transaction.
 Moreover, in this specific example, we are looking at a Legacy transaction. We will explain how to differentiate between Segwit and Legacy later in the guide.
 
 Another important thing to mention is that there is no python implementation of verifying Segwit RAW transactions (at least that I could find), therefore we are going to use bitcoinlib for validating a legacy transaction and write our own logic for SegWit (brace yourself).
 
 
 ## Creating our Callback Application
-We are going to use python and Flask in this guide.
+We are going to use Python and Flask in this guide.\
 First, let’s install some dependencies:\
 ``` pip install flask pyjwt bitcoinlib bech32 fireblocks-sdk```
 
@@ -138,17 +140,17 @@ class JWTHandler:
 
 ```
 
-The class above should be instantiated with the following parameters:
-raw_req - the body (JWT) of the HTTP request we received
-callback_private_key - the private key of your callback server
-cosigner_pubkey - the cosigner public key 
-request_id - none (we will set this value later)
+The class above should be instantiated with the following parameters:\
+```raw_req``` - the body (JWT) of the HTTP request we received\
+```callback_private_key``` - the private key of your callback server\
+```cosigner_pubkey``` - the cosigner public key\
+```request_id``` - none (we will set this value later)\
 
-It also has the following methods:
-set_request_id - a setter for the request ID we got in our HTTP request
-authenticate_request - uses the jwt module in order to verify the signed JWT and returns the decoded payload
-sign_approve_response - Creates and signs the APPROVE response
-sign_reject_response - Creates and signs the REJECT response
+It also has the following methods:\
+```set_request_id``` - a setter for the request ID we got in our HTTP request\
+```authenticate_request``` - uses the jwt module in order to verify the signed JWT and returns the decoded payload\
+```sign_approve_response``` - Creates and signs the APPROVE response\
+```sign_reject_response``` - Creates and signs the REJECT response\
 
 ### Verifying the JWT
 ```python
@@ -176,7 +178,10 @@ class JWTHandler:
 
     def sign_approve_response(self):
         return jwt.encode(
-            {"action": "APPROVE", "requestId": self.request_id},
+            {
+                "action": "APPROVE", 
+                "requestId": self.request_id
+            },
             self.callback_private_key,
             algorithm="RS256")
 
@@ -194,9 +199,7 @@ class JWTHandler:
 @app.route("/v2/tx_sign_request", methods=['POST'])
 def tx_sign_request():
     raw_body = request.data
-    with \
-            open("/Users/slavaserebriannyi/callback_extra_params/cosigner_public.pem", "r") as f1, \
-            open("/Users/slavaserebriannyi/callback_extra_params/private.pem", "r") as f2:
+    with open("cosigner_public.pem", "r") as f1, open("private.pem", "r") as f2:
         cosigner_pubkey = f1.read()
         callback_private_key = f2.read()
     try:
@@ -248,7 +251,7 @@ class FireblocksClient:
 
 ```
 
-Now we can create a BitcoinValidator class and implement the validate_tx method:
+Now we can create a BitcoinValidator class and implement the ```validate_tx``` method:
 ```python
 class BitcoinValidator:
     def __init__(self, callback_metadata):
@@ -260,7 +263,7 @@ class BitcoinValidator:
         pass
 ```
 
-As mentioned before, we need to have the ability to validate 2 different types of transactions, so let’s implement the validate_legacy_tx and validate_segwit_tx methods:
+As mentioned before, we need to have the ability to validate 2 different types of transactions, so let’s implement the ```validate_legacy_tx``` and ```validate_segwit_tx``` methods:
 ```python
 class BitcoinValidator:
     def __init__(self, callback_metadata):
@@ -279,7 +282,7 @@ class BitcoinValidator:
 ```
 
 
-Now we can implement the validate_tx logic:
+Now we can implement the ```validate_tx``` logic:
 ```python
 import bitcoinlib
 
@@ -304,44 +307,73 @@ class BitcoinValidator:
             return False
 ```
 
-So actually what happens here is that instead of trying to identify whether the transaction we are trying to validate is Legacy or Segwit, we will just try…except any legacy transaction parsing error that will be raised. 
+So actually what happens here is that instead of trying to identify whether the transaction we are trying to validate is Legacy or Segwit, we will just ```try…except``` any legacy transaction parsing error that will be raised. 
 
 
 ## Validating Legacy transactions
 
-As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
+Just before the validation process, let's define a few helpers that we'll cover a bit later:
 ```python
-def validate_legacy_tx(self):
-    parsed_tx = None
+from decimal import Decimal
+
+def find_tx_ref(input, index, tx_refs):
+    for i in range(len(tx_refs)):
+        ref = tx_refs[i]
+        if (
+            ref["input"]["txHash"].lower() == input
+            and ref["input"]["index"] == index
+        ):
+            return i
+    return None
+
+def parse_legacy_tx_output(parsed_tx):
     parsed_tx_outputs = {"total_outputs_amount": 0}
-    parsed_tx_inputs = {"total_inputs_amount": 0}
-    tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
-    for i, raw_input in enumerate(self.raw_tx):
-        parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False).as_dict()
-        if len(self.raw_tx) != len(parsed_tx['inputs']):
-            raise LegacyTransactionValidationException("Number of inputs in the parsed tx doesn't match")
-        tx_ref = find_tx_ref(
-            parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
+    for output in parsed_tx["outputs"]:
+        parsed_tx_outputs[output["address"]] = output["value"]
+        parsed_tx_outputs["total_outputs_amount"] += output["value"]
+    return parsed_tx_outputs
+
+def parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs):
+    parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False).as_dict()
+    if num_of_inputs != len(parsed_tx['inputs']):
+        raise LegacyTransactionValidationException("Number of inputs in the parsed tx doesn't match")
+    for i, input_tx in enumerate(parsed_tx['inputs']):
+        tx_ref = find_tx_ref(input_tx["prev_txid"], input_tx["output_n"], tx_refs)
         if tx_ref is not None:
-            parsed_tx_inputs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-            parsed_tx_inputs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+            amount_decimal = Decimal(tx_refs[tx_ref]["amount"])
+            if i == num_of_inputs - 1:
+                parsed_tx['inputs'][i]["amount"] = int(amount_decimal * Decimal(10 ** 8)) - sum(
+                    tx["amount"] for tx in parsed_tx['inputs'][:i])
+            else:
+                parsed_tx['inputs'][i]["amount"] = int(amount_decimal * Decimal(10 ** 8))
         else:
-            raise LegacyTransactionValidationException("Input hash does not exits in transaction refs")
-    for i, parsed_output in enumerate(parsed_tx["outputs"]):
-        parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-        parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
-    tx_fee = int(float(self.metadata["fee"]) * 10 ** 8)
-    metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10 ** 8
-    if len(parsed_tx["outputs"]) == 1:
-        metadata_amount -= tx_fee
+            raise LegacyTransactionValidationException("Input hash does not exist in transaction refs")
+    return parsed_tx
+```
+
+As mentioned before, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
+```python
+from decimal import Decimal
+
+def validate_legacy_tx(self):
+    bitcoinlib.transactions.Transaction.parse_hex(self.metadata["rawTx"][0]["rawTx"], strict=False).as_dict()
+    tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
+    num_of_inputs = len(self.metadata['rawTx'])
+    parsed_txs = [parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs) for raw_input in self.metadata["rawTx"]]
+    parsed_tx_outputs = parse_legacy_tx_output(parsed_txs[0])
+
+    tx_fee = int(Decimal(self.metadata["fee"]) * Decimal(10 ** 8))
+    metadata_amount = int(Decimal(self.metadata["destinations"][0]["amountNative"]) * Decimal(10 ** 8))
     metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
+
+    if len(parsed_txs[0]["outputs"]) == 1:
+        metadata_amount -= tx_fee
+
     if (
             metadata_destination not in parsed_tx_outputs
             or metadata_amount != parsed_tx_outputs[metadata_destination]
-            or parsed_tx_inputs["total_inputs_amount"]
-            - parsed_tx_outputs["total_outputs_amount"]
-            - tx_fee
-            > 0
+            or sum(tx["amount"] for tx in parsed_txs[0]['inputs'])
+            - parsed_tx_outputs["total_outputs_amount"] - tx_fee > 0
     ):
         return False
     return True
@@ -349,29 +381,30 @@ def validate_legacy_tx(self):
 
 Let's try to understand what’s going on here:
 
+First of all we are trying to parse the first raw input with bitcoinlib.\
+If it will raise exception, we know that this is NOT a legacy transaction and we'll move on to SegWit validation:
+```python
+bitcoinlib.transactions.Transaction.parse_hex(self.metadata["rawTx"][0]["rawTx"], strict=False).as_dict()
+```
 
-Basically, the raw transaction does include a previous transaction hash but does not contain any information about the amount of this input.
+The raw transaction does include a previous transaction hash but does not contain any information about the amount of this input.
 In order to get the amounts we need to somehow get the list of unspent transaction outputs for our source address.
 Here we are using the Fireblocks API, specifically [list unspent transaction outputs endoint](https://developers.fireblocks.com/reference/get_vault-accounts-vaultaccountid-assetid-unspent-inputs).
-But it's not mandatory and any external API that provides that info can be used here:
+But it's not mandatory and any external API that provides that info can be used here.
+In addition we are checking the number of raw inputs in our payload:
 ```python
 tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
+num_of_inputs = len(self.metadata['rawTx'])
 ```
 
-
-Iterating through the entire ```rawTx``` array that contains all the inputs of our transaction:
+Iterating through the entire ```rawTx``` list that contains all the inputs of our transaction and parsing each by using the ```parse_legacy_tx_input``` function.\
+The function ```parse_legacy_tx_input``` takes a raw input of a legacy transaction, along with the transaction references (```tx_refs```) and the total number of inputs in the transaction (```num_of_inputs```). Its purpose is to parse and enrich the raw input data by fetching additional information from the ```tx_refs``` and replacing the original amount field in each input with the accurate amount in satoshis.
+:
 ```python
-for i, raw_input in enumerate(self.raw_tx):
+parsed_txs = [parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs) for raw_input in self.metadata["rawTx"]]
 ```
 
-
-Parsing the raw transaction hex by using the bitcoinlib library:
-```python 
-parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
-                raw_input["rawTx"], strict=False
-            ).as_dict()
-```
-It should look similar to:
+Parsing the raw transaction hex by using the bitcoinlib library should yield a result similar to this:
 ```
 {
     'block_hash': None,
@@ -479,73 +512,48 @@ It should look similar to:
     'witness_type': 'legacy'
 }
 ```
-Inputs and Ouputs arrays is actually what we're looking for.
+```inputs``` and ```ouputs``` lists are actually what we're looking for.
 
 
-Once we have the parsed transaction we can compare the number of inputs in it and the number of inputs in our callback payload. It has to be exactly the same number. If not - we are throwing an error:
+The ```parse_legacy_tx_output``` function takes a single parsed legacy transaction input (parsed_tx), which is represented as a dictionary, and its purpose is to extract and organize information about the outputs of the legacy transaction.
 ```python
-if len(self.raw_tx) != len(parsed_tx['inputs']):
-    raise bitcoinlib.transactions.TransactionError("Number of inputs in the parsed tx doesn't match")
+parsed_tx_outputs = parse_legacy_tx_output(parsed_txs[0])
 ```
 
-
-We need to find the amount for each input in the parsed transaction therefore we are looking for it in our transaction references that we quiried via Fireblocks API before by using the ```find_tx_ref``` utility function.
-If the input is not found we throw an error, else we are saving the previous transaction hash as key and the amount as the value in our ```filtered_tx_refs``` dictionary. Also we are saving the total amount of all the inputs in the same dictionary:
+Getting the transaction fee, amount and the destination from the callback payload:
 ```python
-tx_ref = BitcoinUtils.find_tx_ref(parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
-if tx_ref is not None:
-    parsed_tx_inputs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-    parsed_tx_inputs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-else:
-    raise bitcoinlib.transactions.TransactionError(
-        "Input hash does not exits in transaction refs")
-```
-
-
-Iterate through the parsed outputs and saving in a dictionary with the corresponding amount and also the total output amount:
-```python
-for i, parsed_output in enumerate(parsed_tx["outputs"]):
-    parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-    parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
-```
-
-
-Here we are just getting the transaction fee value, the transaction amount and the transaction destination from our callback payload.
-In addition, we are checking whether the transaction has 1 output only and deducting the fee from the total amount (no change in that case):
-```python
-tx_fee = int(float(self.metadata["fee"]) * 10**8)
-metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
-if len(parsed_tx["outputs"]) == 1:
-    metadata_amount -= tx_fee
+tx_fee = int(Decimal(self.metadata["fee"]) * Decimal(10 ** 8))
+metadata_amount = int(Decimal(self.metadata["destinations"][0]["amountNative"]) * Decimal(10 ** 8))
 metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
 ```
 
+Checking if there is only 1 output. If so, the amount is the the entire amount minus fee (this is a scenario where there is no change output and this is a full balance transaction):
+```python
+if len(parsed_txs[0]["outputs"]) == 1:
+    metadata_amount -= tx_fee
+```
 
-Now, after having all the parsed inputs, outputs and their amounts and by also having the transaction fee, amount and the destination from our callback payload, we can actually apply our approval logic:
+And finally we are checking the values and decide if we approve this transaction or not.\
+The logic is quite simple - it has 3 conditions and will return False (reject) if:\
+1. Our destination address does not exist in the parsed transaction outputs.\
+2. The amount that we are trying to send is different from the parsed transaction output value.\
+3. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0
 ```python
 if (
-    len(tx_outputs) > 2
-    or
     metadata_destination not in parsed_tx_outputs
     or metadata_amount != parsed_tx_outputs[metadata_destination]
-    or parsed_tx_inputs["total_inputs_amount"]
-    - parsed_tx_outputs["total_outputs_amount"]
-    - tx_fee
-    > 0
-):
-    return False
+    or sum(tx["amount"] for tx in parsed_txs[0]['inputs'])
+    - parsed_tx_outputs["total_outputs_amount"] - tx_fee > 0
+    ):
+        return False
+    return True
 ```
-So the logic is quite simple. It has 4 conditions and will return False (reject) if:
-1. The number of destinations in the parsed outputs greater than 2 (1 is our destination address and the second is change in case it exists)
-2. Our destination address does not exist in the parsed transaction outputs 
-3. The amount that we are trying to send is different from the parsed transaction output value
-4. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0 
-
-If none of these conditions were met, we will return True and basically approve the legacy transaction signing.
+If none of these conditions are met, we will return ```True``` and basically approve the legacy transaction signing.
 
 ## Validating SegWit transaction
 
-We are going to parse SegWit transactions without any external library. This is how the SegWit raw transaction input looks like in the callback payload (for each UTXO):
+We are going to parse SegWit transactions without any external library.\
+This is how the SegWit raw transaction input looks like in the callback payload (for each UTXO):
 
 ```
 01000000b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632adf0c9e8670413c6c965f9e2a8de2bf881512b8e7ebc067cbf6078d20c18f86086000000001976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac50c3000000000000fffffffff04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba10000000001000000
@@ -577,7 +585,7 @@ OP_EQUALVERIFY:   88 (1 byte)
 OP_CHECKSIG:      ac (1 byte)
 ```
 
-Let's define the OP codes as global constants so we can use it later in different parts of our code:
+Let's define the OP codes as global constants so we can use them later in different parts of our code:
 ```python
 OP_DUP = 0x76
 OP_EQUAL = 0x87
@@ -587,7 +595,7 @@ OP_CHECKSIG = 0xAC
 ```
 
 We can write a few utility functions that will help us to parse this raw payload.
-The first one is ```parseP2WPKHScript``` which will receive the scriptCode (without the size byte), parse it and will return the pubkeyHash:
+The first one is ```parseP2WPKHScript``` which will receive the ```scriptCode``` (without the size byte), parse it and will return the pubkeyHash:
 ```python
 def parseP2WPKHScript(script_code):
     assert script_code[0] == OP_DUP, "byte 0 is not OP_DUP"
@@ -614,7 +622,7 @@ def verify_address(address, pubkey_hash):
 ``` 
 
 Another function that we'll need here is an output serialization function. This function is required since the raw input payload does not contain any information about the destination(s) and the amount(s). The only thing that it actually has is the hash of all the serialized outputs. 
-So we need a function that will create a serialized output based on the information we know (destination addresses and amounts) and then we'll be able to hash all the serialized outputs and compare it with the parsed output hash:
+So we need a function that will create a serialized output based on the information we know (destination addresses and amounts) and then we'll be able to hash all these and compare it with the parsed output hash:
 ```python
 def serialize_output(to_address, amount):
     output_buffer = bytearray()
@@ -644,13 +652,13 @@ def serialize_output(to_address, amount):
             output_buffer += bytearray(pubkey)
             output_buffer.append(OP_EQUAL)
         else:
-            assert False, "Destination address is in unknown format"
+            assert False, "Destination address is in an unknown format"
     return output_buffer
 ```
 
 In addition, we'll need 2 more functions:  
 A hashing function - this function will apply double SHA256 algorithm as required in Bitcoin.\
-A reversing function that will returned the reversed bytes (Bitcoin uses little endian system).\
+A reversing function that will returned the reversed bytes (Bitcoin uses little endian system).
 ```python
 import hashlib
 
@@ -716,7 +724,7 @@ def validate_segwit_tx(self):
 ```
 ### What is actually going on here?
 
-Here we are getting the source vault account from our callback payload and calling Fireblocks to get the unspent transaction input for this vault:
+Here we are getting the source vault account from our callback payload and calling Fireblocks to get the unspent transaction inputs for this vault:
 ```python
 source_vault_account_id = self.metadata["sourceId"]
 tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
@@ -732,10 +740,10 @@ for input_to_sign in self.metadata["rawTx"]:
     change_amount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
 ```
 
-If the change amount smaller than 0 it means that we are in a full balance transcation scenario, hence we need to deduct the fee from the amount we got in the callback.
+If the change amount smaller than 0 it means that we are in a full balance transaction scenario, hence we need to deduct the fee from the amount we got in the callback.
 In that case there will be only one output and we can actually serialize it by calling the ```serialize_output``` utility function we defined before.
 If the change amount is greater than 0 it means that we have at least 2 outputs and we need to serialize the change output as well.
-The change is always sent to the permnanent segwit address of the vault (index=0, change=0) so that's we are calling Fireblocks to actually get the change address for serialization:
+The change is always sent to the permanent segwit address of the vault (index=0, change=0) so we are calling Fireblocks to get the change address for serialization:
 ```python
 if change_amount < 0:
     payload_amount -= int(float(self.metadata["fee"]) * 10 ** 8)
@@ -747,7 +755,7 @@ if change_amount > 0:
 
 In the last piece of code here we are iterating through all of our inputs to sign and verifying it with the ```verify_single_segwit_input``` method. 
 Please note that we need to pass the output hash here, therefore we are applying double SHA256 to the serialized outputs. If ```verify_single_segwit_input``` will raise an ```AssertionError``` we fail the validation
-else we return ```True``` and the validation has passed:
+else we return ```True``` and the validation will pass:
 ```python
 for input_to_sign in self.metadata["rawTx"]:
     try:
