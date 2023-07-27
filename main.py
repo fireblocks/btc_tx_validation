@@ -26,9 +26,7 @@ def tx_sign_request():
         if callback_metadata["asset"] == "BTC":
             bitcoin_validator = BitcoinValidator(callback_metadata)
             if bitcoin_validator.validate_tx():
-                print("Approve")
-                return Response(response=jwt_handler.sign_reject_response())
-            print("Reject")
+                return Response(response=jwt_handler.sign_approve_response())
             return Response(response=jwt_handler.sign_reject_response())
     except DecodeError:
         return Response(
