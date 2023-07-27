@@ -77,24 +77,23 @@ Another important thing to mention is that there is no python implementation of 
 
 
 ## Creating our Callback Application
-We are going to use python and FastAPI in this guide.
+We are going to use python and Flask in this guide.
 First, let’s install some dependencies:\
-``` pip install fastapi pyjwt bitcoinlib uvicorn bech32 fireblocks-sdk aiofiles```
+``` pip install flask pyjwt bitcoinlib bech32 fireblocks-sdk```
 
-Creating our FastAPI application and route:
+Creating our Flask application and route:
 ```python
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
-import uvicorn
+from flask import Flask, request, Response
 
-app = FastAPI()
+app = Flask(__name__)
 
-@app.post("/v2/tx_sign_request")
-async def authorize_tx_request(request: Request) -> Response:
+@app.route("/v2/tx_sign_request", methods=['POST'])
+def tx_sign_request():
     pass
 
-if __name__ == "__main__":
-    uvicorn.run(app, port=8008)
+if __name__ == '__main__':
+    # run app in debug mode on port 8080
+    app.run(debug=True, port=8080)
 ```
 
 ## JWT Verification:
@@ -153,14 +152,10 @@ sign_reject_response - Creates and signs the REJECT response
 
 ### Verifying the JWT
 ```python
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
-import uvicorn
-import jwt
-from jwt import
-import aiofiles
+from jwt import decode, encode, DecodeError
+from flask import Flask, request, Response
 
-app = FastAPI()
+app = Flask(__name__)
 
 class JWTHandler:
     def __init__(self, raw_req, callback_private_key, cosigner_pubkey):
@@ -196,14 +191,14 @@ class JWTHandler:
             algorithm="RS256", 
 )
 
-@app.post("/v2/tx_sign_request")
-async def authorize_tx_request(request: Request) -> JSONResponse:
-    raw_body = await request.body()
-    async with aiofiles.open("cosigner_public.pem", "r") as f1, aiofiles.open(
-        "callback_private.pem", "r"
-    ) as f2:
-        cosigner_pubkey = await f1.read()
-        callback_private_key = await f2.read()
+@app.route("/v2/tx_sign_request", methods=['POST'])
+def tx_sign_request():
+    raw_body = request.data
+    with \
+            open("/Users/slavaserebriannyi/callback_extra_params/cosigner_public.pem", "r") as f1, \
+            open("/Users/slavaserebriannyi/callback_extra_params/private.pem", "r") as f2:
+        cosigner_pubkey = f1.read()
+        callback_private_key = f2.read()
     try:
         jwt_handler = JWTHandler(
             raw_body,
@@ -212,13 +207,11 @@ async def authorize_tx_request(request: Request) -> JSONResponse:
         )
         callback_metadata = jwt_handler.authenticate_request()
     except DecodeError:
-        return JSONResponse(
-            status_code=401, content={"message": "Authentication Failed"}
-        )
+        return Response(status=401, response=json.dumps({"message": "Authentication Failed"}))
 
-
-if __name__ == "__main__":
-    uvicorn.run(app, port=8008)
+if __name__ == '__main__':
+    # run app in debug mode on port 8080
+    app.run(debug=True, port=8080)
 ```
 
 ## Creating helpers
@@ -255,7 +248,7 @@ class FireblocksClient:
 
 ```
 
-Now we can create a BitcoinValidator class that inherits from the BaseValidator class and implement the validate_tx method:
+Now we can create a BitcoinValidator class and implement the validate_tx method:
 ```python
 class BitcoinValidator:
     def __init__(self, callback_metadata):
@@ -763,4 +756,105 @@ for input_to_sign in self.metadata["rawTx"]:
         print(e)
         return False
 return True
+```
+
+
+Our ```BitcointValidator``` class with both ```validate_legacy_tx``` and ```validate_segwit_tx``` methods:
+```python
+class BitcoinValidator:
+    def __init__(self, callback_metadata):
+        self.raw_tx = callback_metadata["rawTx"]
+        self.metadata = callback_metadata
+        self.fireblocks = FireblocksClient()
+
+    def validate_segwit_tx(self):
+        total_amount = 0
+        source_vault_account_id = self.metadata["sourceId"]
+        tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
+        for input_to_sign in self.metadata["rawTx"]:
+            raw_input = bytearray.fromhex(input_to_sign["rawTx"])
+            total_amount += int.from_bytes(raw_input[130:138], "little")
+        payload_amount = int(float(self.metadata["destinations"][0]["amountNative"]) * 10 ** 8)
+        change_amount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
+        if change_amount < 0:
+            payload_amount -= int(float(self.metadata["fee"]) * 10 ** 8)
+        outputs = serialize_output(self.metadata["destAddress"], payload_amount)
+        if change_amount > 0:
+            change_address = self.fireblocks.get_change_address(source_vault_account_id)
+            outputs += serialize_output(change_address, change_amount)
+        for input_to_sign in self.metadata["rawTx"]:
+            try:
+                verify_single_segwit_input(bytearray.fromhex(input_to_sign['rawTx']), tx_refs, double_sha(outputs))
+            except AssertionError as e:
+                print(e)
+                return False
+        return True
+
+    def validate_legacy_tx(self):
+        parsed_tx = None
+        parsed_tx_outputs = {"total_outputs_amount": 0}
+        parsed_tx_inputs = {"total_inputs_amount": 0}
+        tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
+        for i, raw_input in enumerate(self.raw_tx):
+            parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False).as_dict()
+            if len(self.raw_tx) != len(parsed_tx['inputs']):
+                raise LegacyTransactionValidationException("Number of inputs in the parsed tx doesn't match")
+            tx_ref = find_tx_ref(
+                parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
+            if tx_ref is not None:
+                parsed_tx_inputs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+                parsed_tx_inputs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+            else:
+                raise LegacyTransactionValidationException("Input hash does not exits in transaction refs")
+        for i, parsed_output in enumerate(parsed_tx["outputs"]):
+            parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+            parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+        tx_fee = int(float(self.metadata["fee"]) * 10 ** 8)
+        metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10 ** 8
+        if len(parsed_tx["outputs"]) == 1:
+            metadata_amount -= tx_fee
+        metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
+        if (
+                metadata_destination not in parsed_tx_outputs
+                or metadata_amount != parsed_tx_outputs[metadata_destination]
+                or parsed_tx_inputs["total_inputs_amount"]
+                - parsed_tx_outputs["total_outputs_amount"]
+                - tx_fee
+                > 0
+        ):
+            return False
+        return True
+```
+
+And finally, our API route to validate a BTC transaction:
+```python
+@app.route("/v2/tx_sign_request", methods=['POST'])
+def tx_sign_request():
+    raw_body = request.data
+    with \
+            open("/Users/slavaserebriannyi/callback_extra_params/cosigner_public.pem", "r") as f1, \
+            open("/Users/slavaserebriannyi/callback_extra_params/private.pem", "r") as f2:
+        cosigner_pubkey = f1.read()
+        callback_private_key = f2.read()
+    try:
+        jwt_handler = JWTHandler(
+            raw_body,
+            cosigner_pubkey=cosigner_pubkey,
+            callback_private_key=callback_private_key,
+        )
+        callback_metadata = jwt_handler.authenticate_request()
+        if callback_metadata["asset"] == "BTC":
+            bitcoin_validator = BitcoinValidator(callback_metadata)
+            if bitcoin_validator.validate_tx():
+                print("Approving")
+                return Response(response=jwt_handler.sign_reject_response())
+            print("Rejecting")
+            return Response(response=jwt_handler.sign_reject_response())
+    except DecodeError:
+        return Response(status=401, response=json.dumps({"message": "Authentication Failed"}))
+
+
+if __name__ == '__main__':
+    # run app in debug mode on port 8080
+    app.run(debug=True, port=8080)
 ```
