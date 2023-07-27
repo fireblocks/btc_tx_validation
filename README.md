@@ -551,7 +551,7 @@ We are going to parse SegWit transactions without any external library. This is 
 01000000b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632adf0c9e8670413c6c965f9e2a8de2bf881512b8e7ebc067cbf6078d20c18f86086000000001976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac50c3000000000000fffffffff04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba10000000001000000
 ```
 
-After manual parsing (can be found as Native P2WPKH hash preimage in [here]:(https://en.bitcoin.it/wiki/BIP_0143)):
+After manual parsing (can be found as Native P2WPKH hash preimage in [here](https://en.bitcoin.it/wiki/BIP_0143)):
 ```
 nVersion:     01000000
 hashPrevouts: b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195
