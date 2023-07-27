@@ -767,7 +767,7 @@ class BitcoinValidator:
         self.metadata = callback_metadata
         self.fireblocks = FireblocksClient()
 
-    def validate_segwit_tx(self):
+    def validate_segwit_tx(self) -> bool:
         total_amount = 0
         source_vault_account_id = self.metadata["sourceId"]
         tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
@@ -790,7 +790,7 @@ class BitcoinValidator:
                 return False
         return True
 
-    def validate_legacy_tx(self):
+    def validate_legacy_tx(self) -> bool:
         parsed_tx = None
         parsed_tx_outputs = {"total_outputs_amount": 0}
         parsed_tx_inputs = {"total_inputs_amount": 0}
@@ -810,7 +810,7 @@ class BitcoinValidator:
             parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
             parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
         tx_fee = int(float(self.metadata["fee"]) * 10 ** 8)
-        metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10 ** 8
+        metadata_amount = int(self.metadata["destinations"][0]["amountNative"] * 10 ** 8)
         if len(parsed_tx["outputs"]) == 1:
             metadata_amount -= tx_fee
         metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
@@ -824,6 +824,14 @@ class BitcoinValidator:
         ):
             return False
         return True
+
+    def validate_tx(self) -> bool:
+        try:
+            return self.validate_legacy_tx()
+        except bitcoinlib.transactions.TransactionError:
+            return self.validate_segwit_tx()
+        except (LegacyTransactionValidationException, AssertionError, Exception):
+            return False
 ```
 
 And finally, our API route to validate a BTC transaction:
