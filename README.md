@@ -221,19 +221,24 @@ if __name__ == "__main__":
     uvicorn.run(app, port=8008)
 ```
 
-## Creating utility classes
-To make this code reusable and composable we will define an abstract class BaseValidator:
+## Creating helpers
+Let's define 2 exceptions:
+
 ```python
-import abc
+class SegwitTransactionValidationException(Exception):
+    def __init__(self, msg: str):
+        self.message = msg
+        super().__init__(self.message)
 
-class BaseValidator(abc.ABC):
-    @abc.abstractmethod
-    def validate_tx(self) -> bool:
-        raise NotImplementedError
 
+class LegacyTransactionValidationException(Exception):
+    def __init__(self, msg: str):
+        self.message = msg
+        super().__init__(self.message)
 ```
 
-In addition we will need to access Fireblocks API hence let’s define a FireblocksClient class:
+
+We will need to access Fireblocks API so let’s also define a FireblocksClient class:
 ```python
 from fireblocks_sdk import FireblocksSDK
 
@@ -248,7 +253,7 @@ class FireblocksClient:
 
 Now we can create a BitcoinValidator class that inherits from the BaseValidator class and implement the validate_tx method:
 ```python
-class BitcoinValidator(BaseValidator):
+class BitcoinValidator:
     def __init__(self, callback_metadata):
         self.raw_tx = callback_metadata["rawTx"]
         self.metadata = callback_metadata
@@ -260,7 +265,7 @@ class BitcoinValidator(BaseValidator):
 
 As mentioned before, we need to have the ability to validate 2 different types of transactions, so let’s implement the validate_legacy_tx and validate_segwit_tx methods:
 ```python
-class BitcoinValidator(BaseValidator):
+class BitcoinValidator:
     def __init__(self, callback_metadata):
         self.raw_tx = callback_metadata["rawTx"]
         self.metadata = callback_metadata
@@ -276,11 +281,12 @@ class BitcoinValidator(BaseValidator):
         pass
 ```
 
+
 Now we can implement the validate_tx logic:
 ```python
 import bitcoinlib
 
-class BitcoinValidator(BaseValidator):
+class BitcoinValidator:
     def __init__(self, callback_metadata):
         self.raw_tx = callback_metadata["rawTx"]
         self.metadata = callback_metadata
@@ -297,45 +303,44 @@ class BitcoinValidator(BaseValidator):
             return self.validate_legacy_tx()
         except bitcoinlib.transactions.TransactionError:
             return self.validate_segwit_tx()
-        except (SegwitTransactionValidationException, Exception):
+        except (SegwitTransactionValidationException, LegacyTransactionValidationException, Exception):
             return False
 ```
 
-So actually what happens here is that instead of trying to identify whether the transaction we are trying to validate is Legacy or Segwit, we will just try…except any transaction validation error that will be raised. 
+So actually what happens here is that instead of trying to identify whether the transaction we are trying to validate is Legacy or Segwit, we will just try…except any legacy transaction parsing error that will be raised. 
+
 
 ## Validating Legacy transactions
 
 As mentioned above, we are going to use bitcoinlib for legacy transactions and our own implementation of the segwit transactions verification, so let’s start with the easy one - legacy:
 ```python
 def validate_legacy_tx(self):
-    tx_outputs = {"total_outputs_amount": 0}
-    filtered_tx_refs = {"total_inputs_amount": 0}
+    parsed_tx_outputs = {"total_outputs_amount": 0}
+    parsed_tx_inputs = {"total_inputs_amount": 0}
     tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
     for i, raw_input in enumerate(self.raw_tx):
-        parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
-            raw_input["rawTx"], strict=False
-        ).as_dict()
+        parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False).as_dict()
         if len(self.raw_tx) != len(parsed_tx['inputs']):
-            raise bitcoinlib.transactions.TransactionError("Number of inputs in the parsed tx doesn't match")
+            raise LegacyTransactionValidationException("Number of inputs in the parsed tx doesn't match")
         tx_ref = BitcoinUtils.find_tx_ref(
                 parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
         if tx_ref is not None:
-            filtered_tx_refs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-            filtered_tx_refs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+            parsed_tx_inputs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+            parsed_tx_inputs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
         else:
-            raise bitcoinlib.transactions.TransactionError(
-                "Input hash does not exits in transaction refs")
-        tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-        tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+            raise LegacyTransactionValidationException("Input hash does not exits in transaction refs")
+        parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+        parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
 
     tx_fee = int(float(self.metadata["fee"]) * 10**8)
     metadata_amount = self.metadata["destinations"][0]["amountNative"] * 10**8
     metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
+
     if (
-        metadata_destination not in tx_outputs
-        or metadata_amount != tx_outputs[metadata_destination]
-        or filtered_tx_refs["total_inputs_amount"]
-        - tx_outputs["total_outputs_amount"]
+        metadata_destination not in parsed_tx_outputs
+        or metadata_amount != parsed_tx_outputs[metadata_destination]
+        or parsed_tx_inputs["total_inputs_amount"]
+        - parsed_tx_outputs["total_outputs_amount"]
         - tx_fee
         > 0
     ):
@@ -490,8 +495,8 @@ If the input is not found we throw an error, else we are saving the previous tra
 ```python
 tx_ref = BitcoinUtils.find_tx_ref(parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
 if tx_ref is not None:
-    filtered_tx_refs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-    filtered_tx_refs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+    parsed_tx_inputs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
+    parsed_tx_inputs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
 else:
     raise bitcoinlib.transactions.TransactionError(
         "Input hash does not exits in transaction refs")
@@ -500,8 +505,8 @@ else:
 
 Similar logic for the outputs as well:
 ```python
-tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
+parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
+parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
 ```
 
 
@@ -518,10 +523,10 @@ Now, after having all the parsed inputs, outputs and their amounts and by also h
 if (
     len(tx_outputs) > 2
     or
-    metadata_destination not in tx_outputs
-    or metadata_amount != tx_outputs[metadata_destination]
-    or filtered_tx_refs["total_inputs_amount"]
-    - tx_outputs["total_outputs_amount"]
+    metadata_destination not in parsed_tx_outputs
+    or metadata_amount != parsed_tx_outputs[metadata_destination]
+    or parsed_tx_inputs["total_inputs_amount"]
+    - parsed_tx_outputs["total_outputs_amount"]
     - tx_fee
     > 0
 ):
