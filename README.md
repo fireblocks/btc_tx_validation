@@ -539,3 +539,40 @@ So the logic is quite simple. It has 4 conditions and will return False (reject)
 4. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0 
 
 If none of these conditions were met, we will return True and basically approve the legacy transaction signing.
+
+## Validating SegWit transaction
+
+We are going to parse SegWit transactions without any external library. This is how the SegWit raw transaction input looks like:
+
+Provided by the callback:
+```
+01000000b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632adf0c9e8670413c6c965f9e2a8de2bf881512b8e7ebc067cbf6078d20c18f86086000000001976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac50c3000000000000fffffffff04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba10000000001000000
+```
+
+After parsing(can be found as Native P2WPKH hash preimage in [here]:(https://en.bitcoin.it/wiki/BIP_0143)):
+```
+nVersion:     01000000
+hashPrevouts: b10723f7207447d6df6cfe68dde56180f8dfb5beef0fbf4fc3835c16a8d40195
+hashSequence: 752adad0a7b9ceca853768aebb6965eca126a62965f698a0c1bc43d83db632ad
+inputHash:    f0c9e8670413c6c965f9e2a8de2bf881512b8e7ebc067cbf6078d20c18f86086
+inputIndex:   00000000
+scriptCode:   1976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac
+amount:       50c3000000000000
+nSequence:    ffffffff
+hashOutputs:  04d4108c16d20695cd2617917f6fd12ccb88a95faee6ba0ff8908a74fbdfba1
+nLockTime:    00000000
+nHashType:    01000000
+```
+
+While the scriptCode (```1976a91484d685df1cf10dd7849402eef1d902bbbeec721a88ac```) is:
+```
+scriptSize:       19 (1 byte)
+OP_DUP:           76 (1 byte)
+OP_HASH:          a9 (1 byte)
+ripemd160 size:   14 (1 byte)
+pubkeyHash:       84d685df1cf10dd7849402eef1d902bbbeec721a (20 bytes)
+OP_EQUALVERIFY:   88 (1 byte)
+OP_CHECKSIG:      ac (1 byte)
+```
+
+
