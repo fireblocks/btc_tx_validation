@@ -851,8 +851,8 @@ And finally, our API route to validate a BTC transaction:
 def tx_sign_request():
     raw_body = request.data
     with \
-            open("/Users/slavaserebriannyi/callback_extra_params/cosigner_public.pem", "r") as f1, \
-            open("/Users/slavaserebriannyi/callback_extra_params/private.pem", "r") as f2:
+            open("cosigner_public.pem", "r") as f1, \
+            open("private.pem", "r") as f2:
         cosigner_pubkey = f1.read()
         callback_private_key = f2.read()
     try:
