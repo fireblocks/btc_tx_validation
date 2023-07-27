@@ -546,7 +546,7 @@ if (
         return False
     return True
 ```
-If none of these conditions are met, we will return ```True``` and basically approve the legacy transaction signing.
+If none of these conditions is met, we will return ```True``` and basically approve the legacy transaction signing.
 
 ## Validating SegWit transaction
 
@@ -668,7 +668,7 @@ def parse_hash(bytes_to_parse):
     return bytes_to_parse
 ```
 
-Last but not least utility function is ```verify_single_segwit_input``` that actually parses the raw input.
+Another very important helper function is ```verify_single_segwit_input``` that actually parses the raw input.
 This function expects to get the raw input, transaction references and the double SHA256 of the serialized outputs.
 The function parses the relevant parts of the transaction and raises an ```AssertionError``` in case there is some unexpected mismatch:
 ```python
@@ -682,36 +682,53 @@ def verify_single_segwit_input(raw_input, tx_refs, output_hash):
     locktime = int.from_bytes(raw_input[174: 178], "little")
     sighash = int.from_bytes(raw_input[178: 182], "little")
     tx_ref_index = find_tx_ref(input_hash.hex(), input_index, tx_refs)
-    assert tx_ref_index is not None, "Input hash does not exits in transaction refs"
+    assert tx_ref_index is not None, "Input hash does not exist in transaction refs"
     tx_ref = tx_refs[tx_ref_index]
     verify_address(tx_ref["address"], pubkey_hash)
     amount = int.from_bytes(raw_input[130:138], "little")
+    parsed_amount = int(Decimal(tx_ref["amount"]) * Decimal(10 ** 8))
     assert script_size == 0x19, "Script size is not 25 bytes"
-    assert amount == int(float(tx_ref["amount"]) * 10 ** 8), "The provided amount is different from the parsed amount"
+    assert amount == parsed_amount, "The provided amount is different from the parsed amount"
     assert sequence == 0xFFFFFFFF, "Sequence is not -1"  # fireblocks currently uses sequence -1
-    assert outputs_hash == output_hash, "The provided destinations are different from the parsed outputs"
+    assert outputs_hash == output_hash, "The provided output hash is different from the parsed output hash"
     assert locktime == 0, "Lock time is not 0"  # fireblocks currently doesn't set locktime
-    assert sighash == 1, "Sighash is not 1"  # the current protocol version  is 1
+    assert sighash == 1, "Sighash is not 1"  # the current protocol version is 1
 ```
 
+A few additional helper functions will be needed for better code readability of our validation function.
+The ```calculate_total_amount``` function calculates the total amount of inputs in a legacy transaction by summing the amounts extracted from the raw input data of each input in the transaction.
+The ```calculate_change_amount``` function determines the change amount in a transaction, which represents the excess amount that needs to be sent back to the sender to balance the transaction and ensure that the inputs and outputs match:
+```python
+def calculate_total_amount(raw_txs):
+    return sum(int.from_bytes(bytearray.fromhex(raw_input["rawTx"])[130:138], "little") for raw_input in raw_txs)
 
-Let's implement our ```validate_segwit_tx``` method in the ```BitcoinValidator``` class:
+def calculate_change_amount(total_amount, payload_amount, fee):
+    change_amount = total_amount - payload_amount - int(float(fee) * 10 ** 8)
+    return payload_amount - int(float(fee) * 10 ** 8) if change_amount < 0 else change_amount
+```
+
+The last helper function is ```build_outputs``` function.
+The ```build_outputs``` function is responsible for constructing the outputs for a transaction. It takes 3 parameters as input: ```metadata``` (containing information about the transaction), ```payload_amount``` (the amount intended for the recipient), and ```change_amount``` (the amount that needs to be sent back to the sender as change, if applicable).
+Kindly note to implement this function within the ```BitcoinValidator``` class (unlike any other helper function):
+```python
+def build_outputs(metadata, payload_amount, change_amount):
+    outputs = serialize_output(metadata["destAddress"], payload_amount)
+    if change_amount > 0:
+        change_address = self.fireblocks.get_change_address(metadata["sourceId"])
+        outputs += serialize_output(change_address, change_amount)
+    return outputs
+```
+
+And now let's implement our ```validate_segwit_tx``` method in the ```BitcoinValidator``` class:
 ```python
 def validate_segwit_tx(self):
-    total_amount = 0
     source_vault_account_id = self.metadata["sourceId"]
     tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
-    for input_to_sign in self.metadata["rawTx"]:
-        raw_input = bytearray.fromhex(input_to_sign["rawTx"])
-        total_amount += int.from_bytes(raw_input[130:138], "little")
+    total_amount = calculate_total_amount(self.metadata["rawTx"])
     payload_amount = int(float(self.metadata["destinations"][0]["amountNative"]) * 10 ** 8)
-    change_amount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
-    if change_amount < 0:
-        payload_amount -= int(float(self.metadata["fee"]) * 10 ** 8)
-    outputs = serialize_output(self.metadata["destAddress"], payload_amount)
-    if change_amount > 0:
-        change_address = self.fireblocks.get_change_address(source_vault_account_id)
-        outputs += serialize_output(change_address, change_amount)
+    change_amount = calculate_change_amount(total_amount, payload_amount, self.metadata["fee"])
+    outputs = build_outputs(self.metadata, payload_amount, change_amount)
+
     for input_to_sign in self.metadata["rawTx"]:
         try:
             verify_single_segwit_input(bytearray.fromhex(input_to_sign['rawTx']), tx_refs, double_sha(outputs))
@@ -722,38 +739,28 @@ def validate_segwit_tx(self):
 ```
 ### What is actually going on here?
 
-Here we are getting the source vault account from our callback payload and calling Fireblocks to get the unspent transaction inputs for this vault:
+The ```validate_segwit_tx``` function is responsible for validating a SegWit (Segregated Witness) transaction based on the provided metadata and raw input data. It ensures that the transaction meets the necessary requirements and that all inputs are valid.
+It starts by extracting the ```source_vault_account_id``` from the callback payload dictionary and then fetches the transaction references (```tx_refs```) associated with the ```source_vault_account_id``` using ```fireblocks.get_tx_refs()```:
 ```python
 source_vault_account_id = self.metadata["sourceId"]
 tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
 ```
 
-Then, for each raw input to sign, we are parsing the amount of the input and adding it to the total amount.
-We are getting the amount that we got in our callback payload and calculating the change amount:
+It calculates the ```total_amount``` of all inputs in the transaction using the ```calculate_total_amount``` function with the ```metadata["rawTx"]``` as input, then get the transaction amount from the callback payload and calculates the change by using the ```calculate_change_amount``` function, which determines whether there's a change output or not:
 ```python
-for input_to_sign in self.metadata["rawTx"]:
-    raw_input = bytearray.fromhex(input_to_sign["rawTx"])
-    total_amount += int.from_bytes(raw_input[130:138], "little")
-    payload_amount = int(float(self.metadata["destinations"][0]["amountNative"]) * 10 ** 8)
-    change_amount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
+total_amount = calculate_total_amount(self.metadata["rawTx"])
+payload_amount = int(float(self.metadata["destinations"][0]["amountNative"]) * 10 ** 8)
+change_amount = calculate_change_amount(total_amount, payload_amount, self.metadata["fee"])
 ```
 
-If the change amount smaller than 0 it means that we are in a full balance transaction scenario, hence we need to deduct the fee from the amount we got in the callback.
-In that case there will be only one output and we can actually serialize it by calling the ```serialize_output``` utility function we defined before.
-If the change amount is greater than 0 it means that we have at least 2 outputs and we need to serialize the change output as well.
-The change is always sent to the permanent segwit address of the vault (index=0, change=0) so we are calling Fireblocks to get the change address for serialization:
+The outputs are serialized using the ```build_outputs``` function:
 ```python
-if change_amount < 0:
-    payload_amount -= int(float(self.metadata["fee"]) * 10 ** 8)
-outputs = serialize_output(self.metadata["destAddress"], payload_amount)
-if change_amount > 0:
-    change_address = self.fireblocks.get_change_address(source_vault_account_id)
-    outputs += serialize_output(change_address, change_amount)
+outputs = build_outputs(self.metadata, payload_amount, change_amount)
 ```
 
-In the last piece of code here we are iterating through all of our inputs to sign and verifying it with the ```verify_single_segwit_input``` method. 
-Please note that we need to pass the output hash here, therefore we are applying double SHA256 to the serialized outputs. If ```verify_single_segwit_input``` will raise an ```AssertionError``` we fail the validation
-else we return ```True``` and the validation will pass:
+The function then iterates through each raw input in ```metadata["rawTx"]```. For each input, it attempts to verify the input by calling the ```verify_single_segwit_input``` function.
+If any input fails the verification (raises an ```AssertionError```), the error is printed, and the function returns ```False```, indicating that the SegWit transaction is not valid.\
+If all inputs pass the verification, the function returns ```True```, indicating that the SegWit transaction is valid:
 ```python
 for input_to_sign in self.metadata["rawTx"]:
     try:
@@ -773,21 +780,24 @@ class BitcoinValidator:
         self.metadata = callback_metadata
         self.fireblocks = FireblocksClient()
 
-    def validate_segwit_tx(self) -> bool:
-        total_amount = 0
+    def build_outputs(self, payload_amount, fee, change_amount):
+        if not change_amount:
+            outputs = serialize_output(self.metadata["destAddress"], payload_amount - fee)
+        else:
+            outputs = serialize_output(self.metadata["destAddress"], payload_amount)
+            change_address = self.fireblocks.get_change_address(self.metadata["sourceId"])
+            outputs += serialize_output(change_address, change_amount)
+        return outputs
+
+    def validate_segwit_tx(self):
         source_vault_account_id = self.metadata["sourceId"]
         tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
-        for input_to_sign in self.metadata["rawTx"]:
-            raw_input = bytearray.fromhex(input_to_sign["rawTx"])
-            total_amount += int.from_bytes(raw_input[130:138], "little")
-        payload_amount = int(float(self.metadata["destinations"][0]["amountNative"]) * 10 ** 8)
-        change_amount = total_amount - payload_amount - int(float(self.metadata["fee"]) * 10 ** 8)
-        if change_amount < 0:
-            payload_amount -= int(float(self.metadata["fee"]) * 10 ** 8)
-        outputs = serialize_output(self.metadata["destAddress"], payload_amount)
-        if change_amount > 0:
-            change_address = self.fireblocks.get_change_address(source_vault_account_id)
-            outputs += serialize_output(change_address, change_amount)
+        total_amount = calculate_total_amount(self.metadata["rawTx"])
+        payload_amount = int(Decimal(self.metadata["destinations"][0]["amountNative"]) * Decimal(10 ** 8))
+        fee = int(Decimal(self.metadata["fee"]) * Decimal(10 ** 8))
+        change_amount = calculate_change_amount(total_amount, payload_amount, fee)
+        outputs = self.build_outputs(payload_amount, fee, change_amount)
+
         for input_to_sign in self.metadata["rawTx"]:
             try:
                 verify_single_segwit_input(bytearray.fromhex(input_to_sign['rawTx']), tx_refs, double_sha(outputs))
@@ -796,37 +806,25 @@ class BitcoinValidator:
                 return False
         return True
 
-    def validate_legacy_tx(self) -> bool:
-        parsed_tx = None
-        parsed_tx_outputs = {"total_outputs_amount": 0}
-        parsed_tx_inputs = {"total_inputs_amount": 0}
+    def validate_legacy_tx(self):
+        bitcoinlib.transactions.Transaction.parse_hex(self.metadata["rawTx"][0]["rawTx"], strict=False).as_dict()
         tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
-        for i, raw_input in enumerate(self.raw_tx):
-            parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(raw_input["rawTx"], strict=False).as_dict()
-            if len(self.raw_tx) != len(parsed_tx['inputs']):
-                raise LegacyTransactionValidationException("Number of inputs in the parsed tx doesn't match")
-            tx_ref = find_tx_ref(
-                parsed_tx['inputs'][i]["prev_txid"], parsed_tx['inputs'][i]["output_n"], tx_refs)
-            if tx_ref is not None:
-                parsed_tx_inputs[parsed_tx['inputs'][i]["prev_txid"]] = int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-                parsed_tx_inputs["total_inputs_amount"] += int(float(tx_refs[tx_ref]["amount"]) * 10 ** 8)
-            else:
-                raise LegacyTransactionValidationException("Input hash does not exits in transaction refs")
-        for i, parsed_output in enumerate(parsed_tx["outputs"]):
-            parsed_tx_outputs[parsed_tx["outputs"][i]["address"]] = parsed_tx["outputs"][i]["value"]
-            parsed_tx_outputs["total_outputs_amount"] += parsed_tx["outputs"][i]["value"]
-        tx_fee = int(float(self.metadata["fee"]) * 10 ** 8)
-        metadata_amount = int(self.metadata["destinations"][0]["amountNative"] * 10 ** 8)
-        if len(parsed_tx["outputs"]) == 1:
-            metadata_amount -= tx_fee
+        num_of_inputs = len(self.metadata['rawTx'])
+        parsed_txs = [parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs) for raw_input in self.metadata["rawTx"]]
+        parsed_tx_outputs = parse_legacy_tx_output(parsed_txs[0])
+
+        tx_fee = int(Decimal(self.metadata["fee"]) * Decimal(10 ** 8))
+        metadata_amount = int(Decimal(self.metadata["destinations"][0]["amountNative"]) * Decimal(10 ** 8))
         metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
+
+        if len(parsed_txs[0]["outputs"]) == 1:
+            metadata_amount -= tx_fee
+
         if (
-                metadata_destination not in parsed_tx_outputs
-                or metadata_amount != parsed_tx_outputs[metadata_destination]
-                or parsed_tx_inputs["total_inputs_amount"]
-                - parsed_tx_outputs["total_outputs_amount"]
-                - tx_fee
-                > 0
+            metadata_destination not in parsed_tx_outputs
+            or metadata_amount != parsed_tx_outputs[metadata_destination]
+            or sum(tx["amount"] for tx in parsed_txs[0]['inputs'])
+            - parsed_tx_outputs["total_outputs_amount"] - tx_fee > 0
         ):
             return False
         return True
@@ -838,6 +836,7 @@ class BitcoinValidator:
             return self.validate_segwit_tx()
         except (LegacyTransactionValidationException, AssertionError, Exception):
             return False
+
 ```
 
 And finally, our API route to validate a BTC transaction:
