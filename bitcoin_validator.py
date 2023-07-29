@@ -1,93 +1,129 @@
-import bitcoinlib
+import base58
+import bech32
+import hashlib
 from decimal import Decimal
-from fireblocks import FireblocksClient
-from utils.bitcoin_utils import serialize_output, verify_single_segwit_input, double_sha
-from utils.legacy_tx_utils import (
-    parse_legacy_tx_input,
-    parse_legacy_tx_output,
-    LegacyTransactionValidationException,
-)
-from utils.segwit_tx_utils import calculate_total_amount, calculate_change_amount
 
 
-class BitcoinValidator:
-    def __init__(self, callback_metadata):
-        self.raw_tx = callback_metadata["rawTx"]
-        self.metadata = callback_metadata
-        self.fireblocks = FireblocksClient()
+OP_DUP = 0x76
+OP_EQUAL = 0x87
+OP_EQUALVERIFY = 0x88
+OP_HASH160 = 0xA9
+OP_CHECKSIG = 0xAC
 
-    def build_outputs(self, payload_amount, fee, change_amount):
-        if not change_amount:
-            outputs = serialize_output(
-                self.metadata["destAddress"], payload_amount - fee
-            )
-        else:
-            outputs = serialize_output(self.metadata["destAddress"], payload_amount)
-            change_address = self.fireblocks.get_change_address(
-                self.metadata["sourceId"]
-            )
-            outputs += serialize_output(change_address, change_amount)
-        return outputs
 
-    def validate_segwit_tx(self):
-        source_vault_account_id = self.metadata["sourceId"]
-        tx_refs = self.fireblocks.get_tx_refs(source_vault_account_id)
-        total_amount = calculate_total_amount(self.metadata["rawTx"])
-        payload_amount = int(
-            Decimal(self.metadata["destinations"][0]["amountNative"]) * Decimal(10**8)
-        )
-        fee = int(Decimal(self.metadata["fee"]) * Decimal(10**8))
-        change_amount = calculate_change_amount(total_amount, payload_amount, fee)
-        outputs = self.build_outputs(payload_amount, fee, change_amount)
+def parseP2WPKHScript(script_code):
+    """Parse segwit script
+    
+    :param script_code: the script code of the raw tx
+    :return: pybkey_hash (str)
+    """
+    assert script_code[0] == OP_DUP
+    assert script_code[1] == OP_HASH160
+    assert script_code[2] == 20  # ripemd160 size
+    pubkey_hash = script_code[3:23]
+    assert script_code[23] == OP_EQUALVERIFY
+    assert script_code[24] == OP_CHECKSIG
+    return pubkey_hash
 
-        for input_to_sign in self.metadata["rawTx"]:
-            try:
-                verify_single_segwit_input(
-                    bytearray.fromhex(input_to_sign["rawTx"]),
-                    tx_refs,
-                    double_sha(outputs),
-                )
-            except AssertionError as e:
-                print(e)
-                return False
-        return True
 
-    def validate_legacy_tx(self):
-        bitcoinlib.transactions.Transaction.parse_hex(
-            self.metadata["rawTx"][0]["rawTx"], strict=False
-        ).as_dict()
-        tx_refs = self.fireblocks.get_tx_refs(self.metadata["sourceId"])
-        num_of_inputs = len(self.metadata["rawTx"])
-        parsed_txs = [
-            parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs)
-            for raw_input in self.metadata["rawTx"]
-        ]
-        parsed_tx_outputs = parse_legacy_tx_output(parsed_txs[0])
+def serialize_input_point(tx_ref, index):
+    """Serialize a single input
+    
+    :param tx_ref: previous transaction hash
+    :param index: previous transaction vOut
+    :return: serialized input (bytearray)
+    """
+    buffer = bytearray()
+    buffer += tx_ref
+    buffer += index.to_bytes(4, "little")
+    return buffer
 
-        tx_fee = int(Decimal(self.metadata["fee"]) * Decimal(10**8))
-        metadata_amount = int(
-            Decimal(self.metadata["destinations"][0]["amountNative"]) * Decimal(10**8)
-        )
-        metadata_destination = self.metadata["destinations"][0]["displayDstAddress"]
 
-        if len(parsed_txs[0]["outputs"]) == 1:
-            metadata_amount -= tx_fee
+def parse_hash(bytes_to_parse):
+    bytes_to_parse.reverse()
+    return bytes_to_parse
 
+
+def find_tx_ref(tx_input, index, tx_refs):
+    """Find a specific previous transaction hash in the unspent transaction outputs list
+    
+    :param tx_input: previous transaction hash 
+    :param index: previous transaction vOut
+    :param tx_refs: unspent transaction outputs list 
+    :return: index in the unspent transaction outputs list (int) | None 
+    """
+    for i in range(len(tx_refs)):
+        ref = tx_refs[i]
         if (
-            metadata_destination not in parsed_tx_outputs
-            or metadata_amount != parsed_tx_outputs[metadata_destination]
-            or sum(tx["amount"] for tx in parsed_txs[0]["inputs"])
-            - parsed_tx_outputs["total_outputs_amount"]
-            - tx_fee
-            > 0
+            ref["input"]["txHash"].lower() == tx_input
+            and ref["input"]["index"] == index
         ):
-            return False
-        return True
+            return i
+    return None
 
-    def validate_tx(self) -> bool:
-        try:
-            return self.validate_legacy_tx()
-        except bitcoinlib.transactions.TransactionError:
-            return self.validate_segwit_tx()
-        except (LegacyTransactionValidationException, AssertionError, Exception):
-            return False
+
+def verify_address(address, pubkey_hash):
+    """Compare the parsed and the callback payload addresses
+    
+    :param address: address from the callback payload
+    :param pubkey_hash: the parsed pubkey hash
+    :return: 
+    """
+    if address.startswith("bc1"):
+        assert address == bech32.encode(
+            "bc", 0, pubkey_hash
+        ), "The provided SegWit address and parsed pubkey are different"
+    else:
+        assert (
+            address == base58.b58encode_check(b"\x00" + pubkey_hash).decode()
+        ), "The provided Legacy address and parsed pubkey are different"
+
+
+def double_sha(buffer_to_hash):
+    """Generate double SHA256 
+    
+    :param buffer_to_hash: message to hash 
+    :return: double sha256 hash (str)
+    """
+    return hashlib.sha256(hashlib.sha256(buffer_to_hash).digest()).digest()
+
+
+def serialize_output(to_address, amount):
+    """Serialize a single transaction output
+    
+    :param to_address: the destination address 
+    :param amount: the amount for this address
+    :return: the serialized output (bytearray)
+    """
+    output_buffer = bytearray()
+    output_buffer += int(amount).to_bytes(8, "little")
+    if to_address.startswith("bc1"):
+        version, pubkey = bech32.decode("bc", to_address)
+        output_buffer.append(0x16)
+        output_buffer.append(version)
+        output_buffer.append(0x14)
+        output_buffer += bytearray(pubkey)
+    else:
+        addr = base58.b58decode_check(to_address)
+        addrType = addr[0]
+        pubkey = addr[1:]
+        if addrType == 0:  # P2PKH
+            output_buffer.append(0x19)
+            output_buffer.append(OP_DUP)
+            output_buffer.append(OP_HASH160)
+            output_buffer.append(20)
+            output_buffer += bytearray(pubkey)
+            output_buffer.append(OP_EQUALVERIFY)
+            output_buffer.append(OP_CHECKSIG)
+        elif addrType == 5:  # P2SH
+            output_buffer.append(0x17)
+            output_buffer.append(OP_HASH160)
+            output_buffer.append(20)
+            output_buffer += bytearray(pubkey)
+            output_buffer.append(OP_EQUAL)
+        else:
+            assert False
+    return output_buffer
+
+
+
