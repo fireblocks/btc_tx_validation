@@ -1,6 +1,6 @@
 import bitcoinlib
 from decimal import Decimal
-from bitcoin_utils import find_tx_ref
+from .bitcoin_utils import find_tx_ref
 
 
 class LegacyTransactionValidationException(Exception):
@@ -10,6 +10,13 @@ class LegacyTransactionValidationException(Exception):
 
 
 def parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs):
+    """Parse a single legacy input
+
+    :param raw_input: the raw input to parse
+    :param tx_refs: the unspent transcations output list
+    :param num_of_inputs: the total number of inputs provided in the callback payload
+    :return:
+    """
     parsed_tx = bitcoinlib.transactions.Transaction.parse_hex(
         raw_input["rawTx"], strict=False
     ).as_dict()
@@ -37,6 +44,11 @@ def parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs):
 
 
 def parse_legacy_tx_output(parsed_tx):
+    """Parse legacy outputs
+
+    :param parsed_tx: parsed tranasction
+    :return: parsed outputs (dict)
+    """
     parsed_tx_outputs = {"total_outputs_amount": 0}
     for output in parsed_tx["outputs"]:
         parsed_tx_outputs[output["address"]] = output["value"]
