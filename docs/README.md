@@ -2,21 +2,27 @@
 
 BTC transactions are more complex than ETH. This is due the UTXO (Unspent transaction output) model. In addition to the complex transaction model, BTC transactions can be of different types:
 
-Legacy transactions\
-SegWit (Segregated Witness) transactions
++ Legacy transactions
++ SegWit (Segregated Witness) transactions
 
-SegWit in a nutshell - an improvement over the current bitcoin blockchain which reduces the size needed to store transactions in a block. This is done by removing certain signatures with counting serialized witness data as one unit and core block data as four units.
+**SegWit** in a nutshell - an improvement over the current bitcoin blockchain which reduces the size needed to store transactions in a block. This is done by removing certain signatures with counting serialized witness data as one unit and core block data as four units.
 
-Legacy addresses begin with 1 (for example: ```1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC```)\
-SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9xj7petf645z```)
++ Legacy addresses begin with 1 (for example: ```1DpivPqJkLxbRwm4GpxXsNPKS29ou1NYdC```)
++ SegWit addresses begin with bc1 (for example: ```bc1q3j5qmxchekaykrumz97f9pfv5p9xj7petf645z```)
 
-Kindly note that this code should be referenced as an example only.
+<br>
 
-Source code can be found [here](https://github.com/SlavaSereb/btc_validation).
+**Note #1 - That this code should be referenced as an example only.**\
+**Note #2 - Please make sure to update ```fireblocks.py``` with your API key and path to the API secret key.**\
+**Note #3 - This code assumes that your callback private key and the cosigner's public key are within the root dir of the project and the names are:**
++ ```private.pem``` - for the callback private key
++ ```cosigner_public.pem``` - for the cosigner public key
 
+<br>
 
-### Note - Please make sure to update ```fireblocks.py``` with your API key and path to the API secret key.
+**The source code for this example can be found [here](https://github.com/SlavaSereb/btc_validation).**
 
+<br>
 
 ## BTC callback payload example
 
@@ -82,6 +88,7 @@ Moreover, in this specific example, we are looking at a Legacy transaction. We w
 
 Another important thing to mention is that there is no python implementation of verifying Segwit RAW transactions (at least that I could find), therefore we are going to use bitcoinlib for validating a legacy transaction and write our own logic for SegWit (brace yourself).
 
+<br>
 
 ## Creating our Callback Application
 We are going to use Python and Flask in this guide.\
@@ -145,17 +152,19 @@ class JWTHandler:
 
 ```
 
-The class above should be instantiated with the following parameters:\
-```raw_req``` - the body (JWT) of the HTTP request we received\
-```callback_private_key``` - the private key of your callback server\
-```cosigner_pubkey``` - the cosigner public key\
-```request_id``` - none (we will set this value later)\
+The class above should be instantiated with the following parameters:
++ ```raw_req``` - the body (JWT) of the HTTP request we received
++ ```callback_private_key``` - the private key of your callback server
++ ```cosigner_pubkey``` - the cosigner public key
++ ```request_id``` - none (we will set this value later)
 
-It also has the following methods:\
-```set_request_id``` - a setter for the request ID we got in our HTTP request\
-```authenticate_request``` - uses the jwt module in order to verify the signed JWT and returns the decoded payload\
-```sign_approve_response``` - Creates and signs the APPROVE response\
-```sign_reject_response``` - Creates and signs the REJECT response\
+It also has the following methods:
++ ```set_request_id``` - a setter for the request ID we got in our HTTP request
++ ```authenticate_request``` - uses the jwt module in order to verify the signed JWT and returns the decoded payload
++ ```sign_approve_response``` - Creates and signs the APPROVE response
++ ```sign_reject_response``` - Creates and signs the REJECT response
+
+<br>
 
 ### Verifying the JWT
 ```python
@@ -221,6 +230,7 @@ if __name__ == '__main__':
     # run app in debug mode on port 8080
     app.run(debug=True, port=8080)
 ```
+<br>
 
 ## Creating helpers
 Let's define a custom exception:
@@ -314,6 +324,7 @@ class BitcoinValidator:
 
 So actually what happens here is that instead of trying to identify whether the transaction we are trying to validate is Legacy or Segwit, we will just ```try…except``` any legacy transaction parsing error that will be raised. 
 
+<br>
 
 ## Validating Legacy transactions
 
@@ -355,6 +366,7 @@ def parse_legacy_tx_input(raw_input, tx_refs, num_of_inputs):
             raise LegacyTransactionValidationException("Input hash does not exist in transaction refs")
     return parsed_tx
 ```
+<br>
 
 As mentioned before, we are using bitcoinlib for legacy transactions:
 ```python
@@ -383,6 +395,7 @@ def validate_legacy_tx(self):
         return False
     return True
 ```
+<br>
 
 Let's try to understand what is going on here:
 
@@ -515,8 +528,9 @@ Parsing the raw transaction hex by using the bitcoinlib library should yield a r
     'witness_type': 'legacy'
 }
 ```
-```inputs``` and ```ouputs``` lists are actually what we're looking for.
++ ```inputs``` and ```ouputs``` lists are actually what we're looking for.
 
+<br>
 
 The ```parse_legacy_tx_output``` function takes a single parsed legacy transaction input (parsed_tx), which is represented as a dictionary, and its purpose is to extract and organize information about the outputs of the legacy transaction:
 ```python
@@ -537,10 +551,10 @@ if len(parsed_txs[0]["outputs"]) == 1:
 ```
 
 And finally we are checking the values and decide if we approve this transaction or not.\
-The logic is quite simple - it has 3 conditions and will return False (reject) if:\
-A. Our destination address does not exist in the parsed transaction outputs.\
-B. The amount that we are trying to send is different from the parsed transaction output value.\
-C. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0.
+The logic is quite simple - it has 3 conditions and will return False (reject) if:
+1. Our destination address does not exist in the parsed transaction outputs.
+1. The amount that we are trying to send is different from the parsed transaction output value.
+1. The total inputs amount minus the total outputs amount minus the transaction fee is greated than 0.
 
 ```python
 if (
@@ -553,6 +567,8 @@ if (
     return True
 ```
 If none of these conditions are met, we will return ```True``` and basically approve the legacy transaction signing.
+
+<br>
 
 ## Validating SegWit transaction
 
@@ -660,9 +676,9 @@ def serialize_output(to_address, amount):
     return output_buffer
 ```
 
-In addition, we'll need 2 more functions:  
-A hashing function - this function will apply double SHA256 algorithm as required in Bitcoin.\
-A reversing function that will returned the reversed bytes (Bitcoin uses little endian system).
+In addition, we'll need 2 more functions:
++ Hashing function - this function will apply double SHA256 algorithm as required in Bitcoin
++ Reversing function that will returned the reversed bytes (Bitcoin uses little endian system)
 ```python
 import hashlib
 
@@ -743,6 +759,8 @@ def validate_segwit_tx(self):
             return False
     return True
 ```
+<br>
+
 ### What is actually going on here?
 
 The ```validate_segwit_tx``` function is responsible for validating a SegWit (Segregated Witness) transaction based on the provided metadata and raw input data. It ensures that the transaction meets the necessary requirements and that all inputs are valid.
