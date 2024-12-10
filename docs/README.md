@@ -893,3 +893,43 @@ if __name__ == '__main__':
     # run app in debug mode on port 8080
     app.run(debug=True, port=8080)
 ```
+
+For Key Link validation, please the `main.py` file should be the following:
+
+```python
+import json
+from flask import Flask, request, Response
+from bitcoin_validator import BitcoinValidator
+from utils.utils import restructure_key_link_payload
+
+app = Flask(__name__)
+
+
+@app.route("/v2/tx_sign_request", methods=["POST"])
+def tx_sign_request():
+    callback_metadata = json.loads(request.data)
+    try:
+        if (
+            callback_metadata.get("messages", None)[0]
+            .get("transportMetadata", None)
+            .get("type", None)
+            == "KEY_LINK_TX_SIGN_REQUEST"
+        ):
+            print("Got a key link request. Converting the payload.")
+            callback_metadata = restructure_key_link_payload(callback_metadata)
+        if callback_metadata.get("asset", None) == "BTC":
+            bitcoin_validator = BitcoinValidator(callback_metadata)
+            if bitcoin_validator.validate_tx():
+                return Response(response="Approved")
+            return Response(response="Rejected")
+    except Exception:
+        return Response(
+            status=500, response=json.dumps({"message": "Validation Failed: Something went wrong"})
+        )
+
+
+if __name__ == "__main__":
+    # run app in debug mode on port 8080
+    app.run(debug=True, port=8080)
+
+```
