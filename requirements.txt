@@ -4,3 +4,4 @@ bitcoinlib>=0.6.11
 fireblocks-sdk>=1.21.0
 Flask>=2.3.2
 PyJWT>=2.7.0
+requests>=2.32.4 # not directly required, pinned by Snyk to avoid a vulnerability
